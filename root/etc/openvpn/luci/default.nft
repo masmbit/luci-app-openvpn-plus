@@ -6,7 +6,7 @@
 # This is free software, licensed under the Apache License, Version 2.0.
 # See /LICENSE for more information.
 #
-# luci-app-openvpn : smart firewall rules
+# luci-app-openvpn : specific openvpn flood protection protocol filters
 
 #  USEFUL COMMANDS FOR FIREWALL MANAGEMENT & LIVE MONITORING
 #

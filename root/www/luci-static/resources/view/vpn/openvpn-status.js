@@ -57,12 +57,16 @@ const TXT = {
 const CFG = Object.freeze({
 	FILE: Object.freeze({
 		dir_cfg: '/etc/openvpn/luci/',
+		proc: '/proc/',
 		proc_uptime: '/proc/uptime',
+		var_run_openvpn: '/var/run/openvpn.',
 		vpn_disabled_img: '/luci-static/resources/icons/tunnel_disabled.svg',
 		vpn_enabled_img: '/luci-static/resources/icons/tunnel.svg'
 	}),
 	LIBEXEC: Object.freeze({
 		luci_app_openvpn_plus: '/usr/libexec/luci-app-openvpn-plus',
+		readfile: 'readfile',
+		statfile: 'statfile',
 		readstatus: 'readstatus',
 		getmac: 'getmac',
 		getnetstat: 'getnetstat',
@@ -110,7 +114,7 @@ const INSTANCE_TEMPLATE = Object.freeze({
 	port: 0,
 	portExtern: 0,
 	proto: 'udp',
-	smartFirewall: false,
+	floodGuard: false,
 	serverSiteToSite: false,
 	cipher: '-',
 	localIp: '0.0.0.0',
@@ -156,46 +160,6 @@ const sanitizeInputText = function (value) {
 };
 
 /**
- * Declare the native file read RPC once globally (LuCI caches this definition)
- */
-const nativeFileReadRpc = L.rpc.declare({
-	object: 'file',
-	method: 'read',
-	params: ['path']
-});
-
-/**
- * Native RPC wrapper to read a file as a plain string (replaces L.fs.read cleanly)
- */
-const rpcReadFile = async function (path) {
-	const res = await L.resolveDefault(nativeFileReadRpc(path), null);
-	if (res && typeof res === 'object' && typeof res.data === 'string') {
-		return res.data;
-	}
-	return null;
-};
-
-/**
- * Global single registration for file statistics (captures the full stat object)
- */
-const nativeFileStatRpc = L.rpc.declare({
-	object: 'file',
-	method: 'stat',
-	params: ['path']
-});
-
-/**
- * Native RPC wrapper to check file statistics (replaces L.fs.stat cleanly)
- */
-const rpcStatFile = async function (filepath) {
-	const res = await L.resolveDefault(nativeFileStatRpc(filepath), {});
-	if (res && typeof res === 'object' && (typeof res.type === 'string' || typeof res.mtime === 'number')) {
-		return res;
-	}
-	return null;
-};
-
-/**
  * Declare the native file exec RPC once globally (LuCI caches this definition)
  */
 const nativeFileExecRpc = L.rpc.declare({
@@ -235,6 +199,36 @@ const rpcGetServiceStatus = async function () {
 		return res;
 	}
 	return {};
+};
+
+/**
+ * Asynchronously reads a file as a plain string via the secure backend helper
+ */
+const secureReadFile = async function (filepath) {
+	// PASS true AS SECOND PARAMETER TO KEEP ALL NEWLINES AND SPACES!
+	const res = await luci_app_openvpn_plus([CFG.LIBEXEC.readfile, filepath], true);
+	if (res && res.length > 0) {
+		return res;
+	}
+	return null;
+};
+
+/**
+ * Asynchronously checks file statistics via the secure backend helper
+ */
+const secureStatFile = async function (filepath) {
+	const res = await luci_app_openvpn_plus([CFG.LIBEXEC.statfile, filepath]);
+	try {
+		if (res && res.trim().startsWith("{")) {
+			const statObj = JSON.parse(res);
+			if (statObj && typeof statObj === 'object') {
+				return statObj;
+			}
+		}
+	} catch (err) {
+		console.error("Failed to parse file statistics: ", CFG.LIBEXEC.luci_app_openvpn_plus + ' ' + CFG.LIBEXEC.statfile + ' ' + filepath + ' -> ' + err);
+	}
+	return null;
 };
 
 /**
@@ -330,7 +324,7 @@ const getOpenVpnInfo = async function () {
  * Reads system uptime from the proc filesystem asynchronously
  */
 const getSystemUptime = async function () {
-	const rawUptime = await rpcReadFile(CFG.FILE.proc_uptime);
+	const rawUptime = await secureReadFile(CFG.FILE.proc_uptime);
 	// Split the output string by spaces to separate uptime and idle time
 	const partsUptime = String(rawUptime || '0').trim().split(/\s+/);
 	const uptime = (partsUptime && partsUptime[0]) ? parseFloat(partsUptime[0]) : 0;
@@ -986,7 +980,7 @@ const parseClientRefresh = function (content, instNum) {
 		return 5;
 	}
 
-	// Example: status /tmp/run/openvpn.instance1.status 5
+	// Example: status /var/run/openvpn.instance1.status 5
 
 	// Match line starting with status, path, instance filename, space, and digits
 	const patternStr = '^status\\s+\\S+openvpn\\.instance' + instNum + '\\.status\\s+(\\d+)(?:\\s|$)';
@@ -1008,8 +1002,8 @@ const parseSiteToSite = function (content) {
 	return sitetosite_regex.test(content);
 }
 
-const parseSmartFirewall = function (content) {
-	const sitetosite_regex = /^[ \t]*setenv\s+ovpnfirewall\s+on/mi;
+const parseFloodGuard = function (content) {
+	const sitetosite_regex = /^[ \t]*setenv\s+floodguard\s+on/mi;
 	return sitetosite_regex.test(content);
 }
 
@@ -1135,7 +1129,7 @@ const getInstanceConfig = async function (id, instNum, role, path_conf) {
 	let currentSizeConf = 0;
 
 	try {
-		const confStat = await rpcStatFile(path_conf);
+		const confStat = await secureStatFile(path_conf);
 		if (confStat) {
 			if (typeof confStat.mtime === 'object' && confStat.mtime.sec) {
 				currentMtimeConf = parseInt(confStat.mtime.sec, 10) || 0;
@@ -1155,7 +1149,7 @@ const getInstanceConfig = async function (id, instNum, role, path_conf) {
 		// Proceed to live compilation on error
 	}
 
-	let confContent = sanitizeInputText(await rpcReadFile(path_conf));
+	let confContent = sanitizeInputText(await secureReadFile(path_conf));
 	if (confContent.length === 0) {
 		// Signals readSingleInstanceStatus to execute early exit template
 		return null;
@@ -1187,31 +1181,12 @@ const getInstanceConfig = async function (id, instNum, role, path_conf) {
 
 
 	if (role === OPENVPN.ROLE.SERVER) {
-		inst.smartFirewall = parseSmartFirewall(inst.confContent);
+		inst.floodGuard = parseFloodGuard(inst.confContent);
 		inst.serverSiteToSite = parseSiteToSite(inst.confContent);
 	}
 	if ((inst.serverSiteToSite || role === OPENVPN.ROLE.CLIENT)) {
 		inst.remoteSubnets = parseRemoteSubnets(lines, role, false);
 	}
-
-
-	// // check uci
-	// const uciSmartFirewall = L.uci.get(CFG.CMD.openvpn, id, CFG.CMD.ovpnfirewall) === '1';
-	// if (inst.smartFirewall != uciSmartFirewall) {
-	// 	if (inst.smartFirewall === true) {
-	// 		await uciSetBackground(CFG.CMD.openvpn, id, CFG.CMD.ovpnfirewall, '1');
-	// 	} else {
-	// 		await uciDelBackground(CFG.CMD.openvpn, id, CFG.CMD.ovpnfirewall);
-	// 	}
-	// }
-	// const uciSiteToSite = L.uci.get(CFG.CMD.openvpn, id, CFG.CMD.sitetosite) == '1';
-	// if (inst.serverSiteToSite != uciSiteToSite) {
-	// 	if (inst.smartFirewall === true) {
-	// 		await uciSetBackground(CFG.CMD.openvpn, id, CFG.CMD.sitetosite, '1');
-	// 	} else {
-	// 		await uciDelBackground(CFG.CMD.openvpn, id, CFG.CMD.sitetosite);
-	// 	}
-	// }
 
 	inst.useLogFilter = inst.confContent.match(/setenv\s+logfilter\s+on/i) ? true : false;
 
@@ -1258,7 +1233,7 @@ const getInstanceConfig = async function (id, instNum, role, path_conf) {
 const getProcessStartTime = async function (id, pidVal, currentUptime) {
 	try {
 		// Read the file status metadata of the process folder inside the proc filesystem
-		const statObj = await rpcStatFile('/proc/' + pidVal);
+		const statObj = await secureStatFile(CFG.FILE.proc + pidVal);
 
 		if (statObj && statObj.mtime) {
 			let rawMtimeSec = 0;
@@ -1305,8 +1280,8 @@ const getProcessStartTime = async function (id, pidVal, currentUptime) {
  */
 const getConnectedClientsStatus = async function (inst) {
 	try {
-		const statusFilePath = '/tmp/run/openvpn.' + inst.id + '.status';
-		const fileStat = await rpcStatFile(statusFilePath);
+		const statusFilePath = CFG.FILE.var_run_openvpn + inst.id + '.status';
+		const fileStat = await secureStatFile(statusFilePath);
 
 		const maxAllowedFileAge = inst.clientRefresh * 5;
 
@@ -1857,7 +1832,7 @@ return L.Class.extend({
 	getInstanceNumber: getInstanceNumber,
 	calcPortFromId: calcPortFromId,
 	parseSiteToSite: parseSiteToSite,
-	parseSmartFirewall: parseSmartFirewall,
+	parseFloodGuard: parseFloodGuard,
 	parsePortFromConfig: parsePortFromConfig,
 	parseProtoFromConfig: parseProtoFromConfig,
 	parseDdnsFromConfig: parseDdnsFromConfig,
