@@ -192,7 +192,7 @@ const sanitizeInputText = function (value) {
 /**
  * Show simple key editor that verifies and displays key metadata.
  */
-const openKeyEditorModal = function (filename, instance_id, displayId, role, appData, uciSaveApplyRestartCallback, rpcFileCallbacks) {
+const openKeyEditorModal = function (filename, instance_id, displayId, role, appData, uciSaveApplyRestartCallback, secureFileCallbacks) {
 	const absolutePath = CFG.FILE.dir_keys + filename;
 	let hasSaved = false;
 
@@ -289,12 +289,12 @@ const openKeyEditorModal = function (filename, instance_id, displayId, role, app
 	};
 
 	// Read file and parse metadata
-	rpcFileCallbacks.rpcReadFile(absolutePath).then(function (content) {
+	secureFileCallbacks.secureReadFile(absolutePath).then(function (content) {
 		modalKeyTextArea.value = content ? content.trim() + '\n' : '--- EMPTY OR BLANK KEY FILE ---';
 
 		if (!content || content.trim() === '') return;
 
-		rpcFileCallbacks.luci_app_openvpn_plus([CFG.LIBEXEC.keymeta, filename]).then(function (res) {
+		secureFileCallbacks.luci_app_openvpn_plus([CFG.LIBEXEC.keymeta, filename]).then(function (res) {
 			if (res.length > 0) {
 				quickInfoBoxUpdate(res);
 			}
@@ -314,9 +314,9 @@ const openKeyEditorModal = function (filename, instance_id, displayId, role, app
 		const sanitizedKeyContent = sanitizeInputText(modalKeyTextArea.value) + '\n';
 
 		// Write file and re-validate key metadata (Using our clean sanitized text string)
-		rpcFileCallbacks.rpcWriteFile(absolutePath, sanitizedKeyContent)
+		secureFileCallbacks.secureWriteFile(absolutePath, sanitizedKeyContent)
 			.then(function () {
-				return rpcFileCallbacks.luci_app_openvpn_plus([CFG.LIBEXEC.keymeta, filename]);
+				return secureFileCallbacks.luci_app_openvpn_plus([CFG.LIBEXEC.keymeta, filename]);
 			})
 			.then(function (keymeta) {
 
@@ -394,7 +394,7 @@ const openKeyEditorModal = function (filename, instance_id, displayId, role, app
 /**
  * Creates keys and certificates using background background scripts
  */
-const executeAsynchronousKeyGen = function (instance_id, active_mode, rawBitsSelection, selectedYears, targetCnName, customCliString, statusOutputNode, rpcFileCallbacks, finalCallback, displayMode) {
+const executeAsynchronousKeyGen = function (instance_id, active_mode, rawBitsSelection, selectedYears, targetCnName, customCliString, statusOutputNode, secureFileCallbacks, finalCallback, displayMode) {
 	if (!statusOutputNode) {
 		return;
 	}
@@ -404,7 +404,7 @@ const executeAsynchronousKeyGen = function (instance_id, active_mode, rawBitsSel
 		return;
 	}
 
-	const keygenCleanUp = function () { rpcFileCallbacks.luci_app_openvpn_plus([CFG.LIBEXEC.keygenclean]); };
+	const keygenCleanUp = function () { secureFileCallbacks.luci_app_openvpn_plus([CFG.LIBEXEC.keygenclean]); };
 
 	const days = (parseInt(selectedYears, 10) * 365).toString();
 
@@ -465,7 +465,7 @@ const executeAsynchronousKeyGen = function (instance_id, active_mode, rawBitsSel
 	}
 
 	// Run the system command to start the key background script
-	rpcFileCallbacks.luci_app_openvpn_plus([CFG.LIBEXEC.keygen, backendType, instance_id, caBits, days, targetCnName, step1Custom]);
+	secureFileCallbacks.luci_app_openvpn_plus([CFG.LIBEXEC.keygen, backendType, instance_id, caBits, days, targetCnName, step1Custom]);
 
 	if (active_mode === KEYTYPE.pki) {
 		accumulatedPkiLog = ICON.ARROW + TXT.KEY.pki_step1 + '\n';
@@ -487,7 +487,7 @@ const executeAsynchronousKeyGen = function (instance_id, active_mode, rawBitsSel
 	const logPollerInterval = setInterval(function () {
 		pollCount++;
 
-		rpcFileCallbacks.rpcReadFile(CFG.FILE.openvpn_keygen_log).then(function (logContent) {
+		secureFileCallbacks.secureReadFile(CFG.FILE.openvpn_keygen_log).then(function (logContent) {
 			if (logContent && logContent.trim() !== '') {
 				const beautifiedLog = logContent.replace(/\[CMD\]/g, ICON.LAPTOP);
 				statusOutputNode.value = accumulatedPkiLog + beautifiedLog;
@@ -500,7 +500,7 @@ const executeAsynchronousKeyGen = function (instance_id, active_mode, rawBitsSel
 					let targetTmpFile = CFG.FILE.temp_openvpn_keygen + backendType + '.tmp';
 
 					// Read the temporary file containing the generated text data
-					rpcFileCallbacks.rpcReadFile(targetTmpFile).then(function (finalAsset) {
+					secureFileCallbacks.secureReadFile(targetTmpFile).then(function (finalAsset) {
 
 						if (!finalAsset || finalAsset.trim() === '') {
 							return;
@@ -516,7 +516,7 @@ const executeAsynchronousKeyGen = function (instance_id, active_mode, rawBitsSel
 								backendType = KEYTYPE.server_key;
 								accumulatedPkiLog += finalBeautifiedLog + log_separator_line + ICON.ARROW + TXT.KEY.pki_step2 + '\n';
 
-								rpcFileCallbacks.luci_app_openvpn_plus([CFG.LIBEXEC.keygen, backendType, instance_id, bits, days, targetCnName, step2Custom]);
+								secureFileCallbacks.luci_app_openvpn_plus([CFG.LIBEXEC.keygen, backendType, instance_id, bits, days, targetCnName, step2Custom]);
 
 							} else if (currentPkiStep === 2) {
 								pki_payload.key = finalAsset;
@@ -526,7 +526,7 @@ const executeAsynchronousKeyGen = function (instance_id, active_mode, rawBitsSel
 								const displayStepText = (active_mode === KEYTYPE.client_pki) ? TXT.KEY.signing_client_using_server_ca : TXT.KEY.pki_step3;
 								accumulatedPkiLog += finalBeautifiedLog + log_separator_line + ICON.ARROW + displayStepText + '\n';
 
-								rpcFileCallbacks.luci_app_openvpn_plus([CFG.LIBEXEC.keygen, backendType, instance_id, bits, days, targetCnName, step3Custom]);
+								secureFileCallbacks.luci_app_openvpn_plus([CFG.LIBEXEC.keygen, backendType, instance_id, bits, days, targetCnName, step3Custom]);
 
 							} else if (currentPkiStep === 3) {
 								pki_payload.cert = finalAsset;
@@ -537,7 +537,7 @@ const executeAsynchronousKeyGen = function (instance_id, active_mode, rawBitsSel
 
 								if (active_mode === KEYTYPE.client_pki) {
 									// Read the file and use empty string if it fails
-									caPromise = rpcFileCallbacks.rpcReadFile(CFG.FILE.dir_keys + 'ca_' + instance_id + '.crt');
+									caPromise = secureFileCallbacks.secureReadFile(CFG.FILE.dir_keys + 'ca_' + instance_id + '.crt');
 								} else {
 									// Do not read the file, just send an empty string immediately
 									caPromise = Promise.resolve('');
@@ -611,19 +611,19 @@ const executeAsynchronousKeyGen = function (instance_id, active_mode, rawBitsSel
 /**
  * Commits raw cryptographic key components or single key assets sequentially to disk storage.
  */
-const saveKeysToDisk = function (instance_id, active_mode, pkiPayload, singlePayload, rpcFileCallbacks) {
+const saveKeysToDisk = function (instance_id, active_mode, pkiPayload, singlePayload, secureFileCallbacks) {
 	if (active_mode === KEYTYPE.pki) {
 		if (!pkiPayload || !pkiPayload.ca || !pkiPayload.key || !pkiPayload.cert) {
 			return Promise.reject(new Error('Incomplete multi-stage PKI suite payload buffer contents.'));
 		}
 
 		// Write PKI certificates and keys sequentially to disk
-		return rpcFileCallbacks.rpcWriteFile(CFG.FILE.dir_keys + 'ca_' + instance_id + '.crt', pkiPayload.ca.trim() + '\n')
+		return secureFileCallbacks.secureWriteFile(CFG.FILE.dir_keys + 'ca_' + instance_id + '.crt', pkiPayload.ca.trim() + '\n')
 			.then(function () {
-				return rpcFileCallbacks.rpcWriteFile(CFG.FILE.dir_keys + 'server_' + instance_id + '.key', pkiPayload.key.trim() + '\n');
+				return secureFileCallbacks.secureWriteFile(CFG.FILE.dir_keys + 'server_' + instance_id + '.key', pkiPayload.key.trim() + '\n');
 			})
 			.then(function () {
-				return rpcFileCallbacks.rpcWriteFile(CFG.FILE.dir_keys + 'server_' + instance_id + '.crt', pkiPayload.cert.trim() + '\n');
+				return secureFileCallbacks.secureWriteFile(CFG.FILE.dir_keys + 'server_' + instance_id + '.crt', pkiPayload.cert.trim() + '\n');
 			});
 	} else {
 		if (!singlePayload) {
@@ -640,7 +640,7 @@ const saveKeysToDisk = function (instance_id, active_mode, pkiPayload, singlePay
 			targetFile = 'client_' + instance_id + '.tls2.key';
 		}
 		if (targetFile) {
-			return rpcFileCallbacks.rpcWriteFile(CFG.FILE.dir_keys + targetFile, singlePayload.trim() + '\n');
+			return secureFileCallbacks.secureWriteFile(CFG.FILE.dir_keys + targetFile, singlePayload.trim() + '\n');
 		} else {
 			return Promise.reject(new Error('Unknown keytype.'));
 		}
@@ -751,7 +751,7 @@ const openAutomatedPostKeyGenModal = async function (newInstanceItem, appData, w
 
 		await callbacks.createInstance(newInstanceItem, appData, wizardParams);
 
-		executeAsynchronousKeyGen(instance_id, KEYTYPE.pki, KEYTYPE.rsa2048_ec, KEYTYPE.y100, cnName, '', progressTextArea, callbacks.rpcFileCallbacks, function (pkiSuccess, pkiData, nullData) {
+		executeAsynchronousKeyGen(instance_id, KEYTYPE.pki, KEYTYPE.rsa2048_ec, KEYTYPE.y100, cnName, '', progressTextArea, callbacks.secureFileCallbacks, function (pkiSuccess, pkiData, nullData) {
 			if (!pkiSuccess || !pkiData) {
 				progressTextArea.value += '\n' + ICON.ERROR + ' PKI generation failed.';
 				closeBtn.disabled = false;
@@ -762,7 +762,7 @@ const openAutomatedPostKeyGenModal = async function (newInstanceItem, appData, w
 			progressTextArea.value += log_separator_line + ICON.ARROW + TXT.KEY.generate_tls_key + '\n';
 			progressTextArea.scrollTop = progressTextArea.scrollHeight;
 
-			executeAsynchronousKeyGen(instance_id, KEYTYPE.server_tls2, 'none', '0', cnName, '', progressTextArea, callbacks.rpcFileCallbacks, function (tlsSuccess, nullData, tlsData) {
+			executeAsynchronousKeyGen(instance_id, KEYTYPE.server_tls2, 'none', '0', cnName, '', progressTextArea, callbacks.secureFileCallbacks, function (tlsSuccess, nullData, tlsData) {
 				if (!tlsSuccess || !tlsData) {
 					progressTextArea.value += '\n' + ICON.ERROR + 'TLS crypt v2 server master key generation failed.';
 					closeBtn.disabled = false;
@@ -770,8 +770,8 @@ const openAutomatedPostKeyGenModal = async function (newInstanceItem, appData, w
 					return;
 				}
 				Promise.all([
-					saveKeysToDisk(instance_id, KEYTYPE.pki, pkiData, null, callbacks.rpcFileCallbacks),
-					saveKeysToDisk(instance_id, KEYTYPE.server_tls2, null, tlsData, callbacks.rpcFileCallbacks)
+					saveKeysToDisk(instance_id, KEYTYPE.pki, pkiData, null, callbacks.secureFileCallbacks),
+					saveKeysToDisk(instance_id, KEYTYPE.server_tls2, null, tlsData, callbacks.secureFileCallbacks)
 				]).then(function () {
 					progressTextArea.value += '\n' + ICON.SAVE + ' ' + TXT.KEY.pki_saved + '\n' + ICON.SAVE + ' ' + TXT.KEY.tls_key_saved;
 					progressTextArea.scrollTop = progressTextArea.scrollHeight;
@@ -918,7 +918,7 @@ const createKeyGenUiElements = function (role, defaultName, appData) {
 /**
  * Connects all interactive timers, actions and file saving events
  */
-const setupKeyGenEvents = function (ui, instance_id, state, appData, uciSaveApplyRestartCallback, rpcFileCallbacks) {
+const setupKeyGenEvents = function (ui, instance_id, state, appData, uciSaveApplyRestartCallback, secureFileCallbacks) {
 	// Use ui.nodes.options to safely find the unique mode dropdown element layout
 	const modeSelect = (ui.nodes && ui.nodes.options) ? ui.nodes.options.querySelector('#' + CFG.ID.central_keygen_mode) : null;
 
@@ -1046,7 +1046,7 @@ const setupKeyGenEvents = function (ui, instance_id, state, appData, uciSaveAppl
 		modeSelect.disabled = true;
 
 		// STEP 1: Start core asynchronous cryptographic generation
-		executeAsynchronousKeyGen(instance_id, state.mode, rawBitsSelection, selectedYears, finalCn, baseCustomArgs, ui.nodes.output, rpcFileCallbacks, function (isSuccessful, pkiData, singleData) {
+		executeAsynchronousKeyGen(instance_id, state.mode, rawBitsSelection, selectedYears, finalCn, baseCustomArgs, ui.nodes.output, secureFileCallbacks, function (isSuccessful, pkiData, singleData) {
 			if (isSuccessful) {
 				// Scenario A: If a Site-to-Site client bundle is requested, chain the asymmetric client token derivation instantly
 				if (state.mode === KEYTYPE.client_pki) {
@@ -1055,7 +1055,7 @@ const setupKeyGenEvents = function (ui, instance_id, state, appData, uciSaveAppl
 					ui.nodes.output.scrollTop = ui.nodes.output.scrollHeight;
 
 					// STEP 2: Asynchronously generate the client-tls2 credentials into the volatile RAM buffer
-					executeAsynchronousKeyGen(instance_id, KEYTYPE.client_tls2, 'none', '0', finalCn, '', ui.nodes.output, rpcFileCallbacks, function (tlsSuccess, nullData, tlsData) {
+					executeAsynchronousKeyGen(instance_id, KEYTYPE.client_tls2, 'none', '0', finalCn, '', ui.nodes.output, secureFileCallbacks, function (tlsSuccess, nullData, tlsData) {
 						ui.buttons.generate.disabled = false;
 						modeSelect.disabled = false;
 
@@ -1114,7 +1114,7 @@ const setupKeyGenEvents = function (ui, instance_id, state, appData, uciSaveAppl
 		ui.buttons.save.disabled = true;
 		ui.buttons.save.style.opacity = '0.5';
 
-		saveKeysToDisk(instance_id, state.mode, state.pkiData, state.singleData, rpcFileCallbacks)
+		saveKeysToDisk(instance_id, state.mode, state.pkiData, state.singleData, secureFileCallbacks)
 			.then(function () {
 				state.hasSaved = true;
 				state.isGenerated = false;
@@ -1191,7 +1191,7 @@ const setupKeyGenEvents = function (ui, instance_id, state, appData, uciSaveAppl
 /**
  * Opens the key generator window to create keys and certificates (Slim and Modular)
  */
-const openKeyGenModal = function (instance_id, displayId, role, appData, uciSaveApplyRestartCallback, rpcFileCallbacks) {
+const openKeyGenModal = function (instance_id, displayId, role, appData, uciSaveApplyRestartCallback, secureFileCallbacks) {
 	// Create the configuration elements and buttons using our sub-routines
 	const ui = createKeyGenUiElements(role, displayId, appData);
 
@@ -1205,7 +1205,7 @@ const openKeyGenModal = function (instance_id, displayId, role, appData, uciSave
 	};
 
 	// Setup all interactive listeners and event routing logic
-	setupKeyGenEvents(ui, instance_id, state, appData, uciSaveApplyRestartCallback, rpcFileCallbacks);
+	setupKeyGenEvents(ui, instance_id, state, appData, uciSaveApplyRestartCallback, secureFileCallbacks);
 
 	// Render the complete key generator overlay view layout structure
 	L.ui.showModal(TXT.KEY.title_main + ' (' + displayId + ')', [
