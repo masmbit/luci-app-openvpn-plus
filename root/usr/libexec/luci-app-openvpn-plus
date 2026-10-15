@@ -442,9 +442,10 @@ firewallservice () {
 	fi
 
 	# 2. Call the standard OpenWrt system firewall controller safely
-	if [ "$action_cmd" = "stop" ] || [ "$action_cmd" = "start" ] || [ "$action_cmd" = "restart" ]; then
+	if [ "$action_cmd" = "stop" ] || [ "$action_cmd" = "start" ] || [ "$action_cmd" = "restart" ] || [ "$action_cmd" = "reload" ]; then
 		/etc/init.d/firewall "$action_cmd" >/dev/null 2>&1
 	fi
+
 	return 0
 }
 
@@ -1371,6 +1372,7 @@ cleanup() {
 			if ! uci -q get openvpn."$instname" >/dev/null; then
 				rm -f "$conf_file"
 				rm -f "$conf_dir/${instname}.nft"
+				rm -f "$conf_dir/${instname}.jmp.nft"
 				rm -f "$conf_dir/${instname}.s2s.nft"
 				rm -f "$key_dir/ca_${instname}.crt"
 				rm -f "$key_dir/dh_${instname}.pem"
@@ -1909,15 +1911,15 @@ ovpnservice_async() {
 		rm -f "$pid_file"
 
 		# 2. Start the target command via worker wrapper to handle absolute lifecycle traps
-		start-stop-daemon -S -b -m -p "$pid_file" -x "$0" -- ovpnservice_worker "$pid_file" "$action_cmd" "$inst"
+		start-stop-daemon -S -b -m -p "$pid_file" -x "$0" -- ovpnservice_worker "$action_cmd" "$inst"
 	fi
 	return 0
 }
 ovpnservice_worker() {
 	shift # Remove "ovpnservice_worker" from the arguments list
-	local pid_file="$1"
-	local cmd="$2"
-	local inst="$3"
+	local pid_file="/var/run/luci-app-openvpn-plus-ovpn-service.pid"
+	local cmd="$1"
+	local inst="$2"
 	trap 'rm -f "$pid_file"' EXIT INT TERM
 	if [ "$cmd" = "start" ]; then
 		ovpnstart "ovpnstart" "$inst" 3
@@ -1941,14 +1943,14 @@ firewallservice_async() {
 
 		# 2. Start the worker directly via the main script frame context
 		# Inside the worker, we use a trap to cleanly remove the pid_file upon exit
-		start-stop-daemon -S -b -m -p "$pid_file" -x "$0" -- firewallservice_worker "$pid_file" "$action_cmd"
+		start-stop-daemon -S -b -m -p "$pid_file" -x "$0" -- firewallservice_worker "$action_cmd"
 	fi
 	return 0
 }
 firewallservice_worker() {
 	shift # Remove "firewallservice_worker" from the arguments list
-	local pid_file="$1"
-	local cmd="$2"
+	local cmd="$1"
+	local pid_file="/var/run/luci-app-openvpn-plus-firewall-service.pid"
 	trap 'rm -f "$pid_file"' EXIT INT TERM
 	firewallservice "firewallservice" "$cmd" 3
 	rm -f "$pid_file"
@@ -1957,17 +1959,18 @@ firewallservice_worker() {
 
 initkeys_async() {
 	shift # Remove "initkeys_async" from the arguments list
+	local pid_file="/var/run/openvpn.initkeys.pid"
 	# 1. Check if the key generator is running
-	if start-stop-daemon -K -q -p "/var/run/openvpn.initkeys.pid" -t 2>/dev/null; then
+	if start-stop-daemon -K -q -p "$pid_file" -t 2>/dev/null; then
 		exit 0
 	fi
 	# 2. Start the background worker and create the PID file automatically
-	start-stop-daemon -S -b -m -p "/var/run/openvpn.initkeys.pid" -x "$0" -- "initkeys_worker" "/var/run/openvpn.initkeys.pid"
+	start-stop-daemon -S -b -m -p "$pid_file" -x "$0" -- "initkeys_worker"
 	return 0
 }
 initkeys_worker() {
 	shift # Remove "initkeys_worker" from the arguments list
-	local pid_file="$1"
+	local pid_file="/var/run/openvpn.initkeys.pid"
 	# 3. Secure the PID file lifecycle instantly with a trap framework
 	trap 'rm -f "$pid_file"' EXIT INT TERM
 	# 4. Run the key creation function quietly in the background
@@ -1980,14 +1983,23 @@ keygen_async() {
 	shift # Remove "keygen" from the arguments list
 	local type="$1"
 	local instance="$2"
+	if [ -z "$instance" ] || ! echo "$instance" | grep -Eq '^[A-Za-z0-9_-]+$'; then
+		echo "ERROR: Invalid instance name." >&2
+		return 1
+	fi
+	local pid_file="/var/run/openvpn.keygen-${instance}.pid"
 	# 1. Start the background keygen worker and create the PID file automatically
-	start-stop-daemon -S -b -m -p "/var/run/openvpn.keygen-${instance}.pid" -x "$0" -- "keygen_worker" "/var/run/openvpn.keygen-${instance}.pid" "$@"
+	start-stop-daemon -S -b -m -p "$pid_file" -x "$0" -- "keygen_worker" "$instance" "$@"
 	return 0
 }
 keygen_worker() {
 	shift # Remove "keygen_worker" from the arguments list
-	local pid_file="$1"
-	shift # Remove "pid_file" from the arguments list
+	local instance="$1"
+	if [ -z "$instance" ] || ! echo "$instance" | grep -Eq '^[A-Za-z0-9_-]+$'; then
+		return 1
+	fi
+	local pid_file="/var/run/openvpn.keygen-${instance}.pid"
+	shift # Remove "instance" from the arguments list
 	# 3. Secure the dynamic PID node tracking with a strict trap guard
 	trap 'rm -f "$pid_file"' EXIT INT TERM
 	# 4. Run the certificate engine pipeline with corrected original parameters ($@: type="$1", instance="$2")

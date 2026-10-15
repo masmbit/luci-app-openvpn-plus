@@ -82,8 +82,8 @@ const OPENVPN = Object.freeze({
 		CLIENT: 'client'
 	}),
 	PROTO: Object.freeze({
-		TCP: 'tcp',
-		UDP: 'udp'
+		tcp: 'tcp',
+		udp: 'udp'
 	}),
 	PORT: Object.freeze({
 		s1194: '1194'
@@ -173,9 +173,15 @@ const nativeFileExecRpc = L.rpc.declare({
 const luci_app_openvpn_plus = async function (args, skipTrim) {
 	const extraArgs = (typeof args === 'string') ? [args] : (Array.isArray(args) ? args : []);
 	const res = await L.resolveDefault(nativeFileExecRpc(CFG.LIBEXEC.luci_app_openvpn_plus, extraArgs), {});
+
+	// CHECK EXIT CODE: If the backend returned anything else than 0, it failed!
+	if (res && typeof res === 'object' && res.code !== undefined && res.code !== 0) {
+		return 'ERROR: CODE_' + res.code;
+	}
 	if (res && typeof res === 'object' && typeof res.stdout === 'string') {
 		if (skipTrim === true) {
-			return res.stdout.trim();
+			// Remove ONLY the very last trailing newline character cleanly
+			return res.stdout.replace(/\r?\n$/, '');
 		} else {
 			return res.stdout.trim();
 		}
@@ -210,10 +216,10 @@ const rpcGetServiceStatus = async function () {
 const secureReadStatusFile = async function (filepath) {
 	// PASS true AS SECOND PARAMETER TO KEEP ALL NEWLINES AND SPACES!
 	const res = await luci_app_openvpn_plus([CFG.LIBEXEC.readstatus, filepath], true);
-	if (res && res.length > 0) {
-		return res;
+	if (!res || res.length === 0 || res.startsWith('ERROR')) {
+		return null;
 	}
-	return null;
+	return res;
 };
 
 /**
@@ -221,15 +227,11 @@ const secureReadStatusFile = async function (filepath) {
  */
 const secureStatFile = async function (filepath) {
 	const res = await luci_app_openvpn_plus([CFG.LIBEXEC.statfile, filepath]);
-	try {
-		if (res && res.startsWith("{")) {
-			const statObj = JSON.parse(res);
-			if (statObj && typeof statObj === 'object') {
-				return statObj;
-			}
+	if (res && res.startsWith("{")) {
+		const statObj = JSON.parse(res);
+		if (statObj && typeof statObj === 'object') {
+			return statObj;
 		}
-	} catch (err) {
-		console.error("Failed to parse file statistics: ", CFG.LIBEXEC.luci_app_openvpn_plus + ' ' + CFG.LIBEXEC.statfile + ' ' + filepath + ' -> ' + err);
 	}
 	return null;
 };
@@ -277,14 +279,14 @@ const openVpnInfo = {
 }
 
 /**
- * Checks if at least one OpenVPN instance is enabled in the configuration array
+ * Checks if at least one OpenVPN instance is enabled in the configuration array and collects system capabilities securely.
  */
 const getOpenVpnInfo = async function () {
 
-	// get mac address
+	// 1. Get MAC address safely
 	let rawMac = await luci_app_openvpn_plus([CFG.LIBEXEC.getmac]);
 
-	if (rawMac.length > 0 && rawMac !== '00:00:00:00:00:00') {
+	if (rawMac && rawMac.length > 0 && !rawMac.startsWith('ERROR') && rawMac !== '00:00:00:00:00:00') {
 		const cleanMac = rawMac.replace(/[^a-fA-F0-9]/g, '');
 
 		// Isolate the last 3 hex characters (12-bit entropy seed)
@@ -297,31 +299,34 @@ const getOpenVpnInfo = async function () {
 		}
 	}
 
-	// get ovpn version
+	// 2. Get OpenVPN version and capabilities safely
 	const rawVersion = await luci_app_openvpn_plus([CFG.LIBEXEC.ovpnver]);
-	if (rawVersion.length > 0) {
-		// Looks for "OpenVPN" followed by spaces, and stops at the first space or bracket.
-		// This safely ignores git tags like [git:DSM7-...] or OS tags.
-		const ovpnMatch = rawVersion.match(/OpenVPN\s+([0-9.]+)/);
-		if (ovpnMatch && ovpnMatch[1]) {
-			openVpnInfo.version = ovpnMatch[1];
-		}
 
-		// This searches for keywords like OpenSSL, mbedTLS, or wolfSSL followed by their numbers.
-		const sslMatch = rawVersion.match(/(OpenSSL|mbedTLS|wolfSSL)\s+([0-9a-zA-Z.]+)/i);
-		if (sslMatch) {
-			// sslMatch[1] is the name (e.g. "OpenSSL"), sslMatch[2] is the version (e.g. "3.5.8")
-			openVpnInfo.openssl = sslMatch[2];
-			openVpnInfo.openssl_type = sslMatch[1];
-		}
-
-		// Looks for "DCO version:". If it finds "N/A", we keep the default 'Disabled' state.
-		const dcoMatch = rawVersion.match(/DCO version:\s+([0-9.]+)/);
-		if (dcoMatch && dcoMatch[1]) {
-			openVpnInfo.dco = dcoMatch[1];
-		}
+	// Abort if the version query returned a backend error or empty response
+	if (!rawVersion || rawVersion.length === 0 || rawVersion.startsWith('ERROR')) {
+		return;
 	}
-}
+
+	// Looks for "OpenVPN" followed by spaces, and stops at the first space or bracket.
+	const ovpnMatch = rawVersion.match(/OpenVPN\s+([0-9.]+)/);
+	if (ovpnMatch && ovpnMatch[1]) {
+		openVpnInfo.version = ovpnMatch[1];
+	}
+
+	// This searches for keywords like OpenSSL, mbedTLS, or wolfSSL followed by their numbers.
+	const sslMatch = rawVersion.match(/(OpenSSL|mbedTLS|wolfSSL)\s+([0-9a-zA-Z.]+)/i);
+	if (sslMatch) {
+		openVpnInfo.openssl = sslMatch[2];
+		openVpnInfo.openssl_type = sslMatch[1];
+	}
+
+	// Looks for "DCO version:". If it finds "N/A", we keep the default 'Disabled' state.
+	const dcoMatch = rawVersion.match(/DCO version:\s+([0-9.]+)/);
+	if (dcoMatch && dcoMatch[1]) {
+		openVpnInfo.dco = dcoMatch[1];
+	}
+};
+
 
 /**
  * Reads system uptime from the proc filesystem asynchronously
@@ -338,98 +343,98 @@ const getSystemUptime = async function () {
  * Reads network statistics using parallel RPC requests and updates each instance object
  */
 const refreshNetStat = async function (instances) {
-	try {
-		// Check if the input is a valid array with data
-		if (!Array.isArray(instances) || instances.length === 0) {
-			return;
+	// Check if the input is a valid array with data
+	if (!Array.isArray(instances) || instances.length === 0) {
+		return;
+	}
+
+	// Reset all netstat fields to a default empty structure first
+	for (let i = 0; i < instances.length; i++) {
+		instances[i].netstat = {
+			rxBytes: 0,
+			txBytes: 0,
+			rxPkts: 0,
+			txPkts: 0,
+			hasData: false
+		};
+	}
+
+	const promises = [];
+
+	// Step 1: Start RPC requests for running instances at the same time
+	for (let j = 0; j < instances.length; j++) {
+		const inst = instances[j];
+		if (inst && inst.isRunning === true && inst.devName) {
+			promises.push(luci_app_openvpn_plus([CFG.LIBEXEC.getnetstat, inst.devName]));
+		}
+	}
+
+	// Step 2: Wait for all parallel backend calls to finish
+	const results = await Promise.all(promises);
+
+	// Step 3: Parse the results and map them directly into the correct instance
+	for (let k = 0; k < results.length; k++) {
+		const res_getnetstat = results[k] ? String(results[k]).trim() : '';
+
+		// Catch backend execution errors immediately and skip this result row
+		if (res_getnetstat === '' || res_getnetstat.startsWith('ERROR')) {
+			continue;
 		}
 
-		// Reset all netstat fields to a default empty structure first
-		for (let i = 0; i < instances.length; i++) {
-			instances[i].netstat = {
-				rxBytes: 0,
-				txBytes: 0,
-				rxPkts: 0,
-				txPkts: 0,
-				hasData: false
-			};
-		}
+		const partsMetrics = res_getnetstat.split('|');
 
-		const promises = [];
+		// Check if the backend returned all 6 fields (rxb|txb|rxp|txp|status|iface)
+		if (partsMetrics && partsMetrics.length === 6) {
+			const ifaceName = partsMetrics[5];
+			const isUp = (partsMetrics[4] === 'true');
 
-		// Step 1: Start RPC requests for running instances at the same time
-		for (let j = 0; j < instances.length; j++) {
-			const inst = instances[j];
-			if (inst && inst.isRunning === true && inst.devName) {
-				promises.push(luci_app_openvpn_plus([CFG.LIBEXEC.getnetstat, inst.devName]));
-			}
-		}
+			// Find the matching instance by comparing the device name
+			for (let m = 0; m < instances.length; m++) {
+				const targetInst = instances[m];
+				const expectedDev = targetInst.devName;
 
-		// Step 2: Wait for all parallel backend calls to finish
-		const results = await Promise.all(promises);
-
-		// Step 3: Parse the results and map them directly into the correct instance
-		for (let k = 0; k < results.length; k++) {
-			const res_getnetstat = results[k] ? String(results[k]).trim() : '';
-			const partsMetrics = res_getnetstat.split('|');
-
-			// Check if the backend returned all 6 fields (rxb|txb|rxp|txp|status|iface)
-			if (partsMetrics && partsMetrics.length === 6) {
-				const ifaceName = partsMetrics[5];
-				const isUp = (partsMetrics[4] === 'true');
-
-				// Find the matching instance by comparing the device name
-				for (let m = 0; m < instances.length; m++) {
-					const targetInst = instances[m];
-					const expectedDev = targetInst.devName;
-
-					if (expectedDev === ifaceName) {
-						targetInst.netstat.rxBytes = parseInt(partsMetrics[0], 10) || 0;
-						targetInst.netstat.txBytes = parseInt(partsMetrics[1], 10) || 0;
-						targetInst.netstat.rxPkts = parseInt(partsMetrics[2], 10) || 0;
-						targetInst.netstat.txPkts = parseInt(partsMetrics[3], 10) || 0;
-						targetInst.netstat.hasData = isUp;
-						break;
-					}
+				if (expectedDev === ifaceName) {
+					targetInst.netstat.rxBytes = parseInt(partsMetrics[0], 10) || 0;
+					targetInst.netstat.txBytes = parseInt(partsMetrics[1], 10) || 0;
+					targetInst.netstat.rxPkts = parseInt(partsMetrics[2], 10) || 0;
+					targetInst.netstat.txPkts = parseInt(partsMetrics[3], 10) || 0;
+					targetInst.netstat.hasData = isUp;
+					break;
 				}
 			}
 		}
+	}
 
-		// Step 4: Sanity check to fix DCO kernel sync delays against active session bytes
-		for (let n = 0; n < instances.length; n++) {
-			const activeInst = instances[n];
+	// Step 4: Sanity check to fix DCO kernel sync delays against active session bytes
+	for (let n = 0; n < instances.length; n++) {
+		const activeInst = instances[n];
 
-			// Only compare if the instance is running and has connected clients
-			if (activeInst && activeInst.isRunning === true && Array.isArray(activeInst.connectedClients)) {
-				let totalClientRx = 0;
-				let totalClientTx = 0;
+		// Only compare if the instance is running and has connected clients
+		if (activeInst && activeInst.isRunning === true && Array.isArray(activeInst.connectedClients)) {
+			let totalClientRx = 0;
+			let totalClientTx = 0;
 
-				// Sum up the bytes from all currently connected clients
-				for (let c = 0; c < activeInst.connectedClients.length; c++) {
-					const client = activeInst.connectedClients[c];
-					if (client) {
-						totalClientRx += client.bytesReceived || 0;
-						totalClientTx += client.bytesSent || 0;
-					}
-				}
-
-				// If kernel statistics are lower than session bytes, force the session values
-				if (activeInst.netstat.rxBytes < totalClientRx) {
-					activeInst.netstat.rxBytes = totalClientRx;
-					activeInst.netstat.hasData = true;
-				}
-				if (activeInst.netstat.txBytes < totalClientTx) {
-					activeInst.netstat.txBytes = totalClientTx;
-					activeInst.netstat.hasData = true;
+			// Sum up the bytes from all currently connected clients
+			for (let c = 0; c < activeInst.connectedClients.length; c++) {
+				const client = activeInst.connectedClients[c];
+				if (client) {
+					totalClientRx += client.bytesReceived || 0;
+					totalClientTx += client.bytesSent || 0;
 				}
 			}
-		}
 
-	} catch (err) {
-		console.error('Error refreshing network data:', err);
+			// If kernel statistics are lower than session bytes, force the session values
+			if (activeInst.netstat.rxBytes < totalClientRx) {
+				activeInst.netstat.rxBytes = totalClientRx;
+				activeInst.netstat.hasData = true;
+			}
+			if (activeInst.netstat.txBytes < totalClientTx) {
+				activeInst.netstat.txBytes = totalClientTx;
+				activeInst.netstat.hasData = true;
+			}
+		}
 	}
 };
-
 
 /**
  * Parses client IP addresses from the OpenVPN status log text file
@@ -676,7 +681,7 @@ const parsePortFromConfig = function (role, content) {
  * Extracts the OpenVPN protocol string (udp/tcp) from the configuration text safely
  */
 const parseProtoFromConfig = function (content) {
-	if (!content) return OPENVPN.PROTO.UDP;
+	if (!content) return OPENVPN.PROTO.udp;
 
 	let lines
 	if (Array.isArray(content)) {
@@ -702,12 +707,12 @@ const parseProtoFromConfig = function (content) {
 		if (tokens[0].toLowerCase() === 'proto') {
 			const protoVal = tokens[1].toLowerCase();
 			// Handle standard openvpn proto values (udp, tcp, udp4, tcp4, udp6, tcp6)
-			if (protoVal.indexOf(OPENVPN.PROTO.TCP) !== -1) return OPENVPN.PROTO.TCP;
-			if (protoVal.indexOf(OPENVPN.PROTO.UDP) !== -1) return OPENVPN.PROTO.UDP;
+			if (protoVal.indexOf(OPENVPN.PROTO.tcp) !== -1) return OPENVPN.PROTO.tcp;
+			if (protoVal.indexOf(OPENVPN.PROTO.udp) !== -1) return OPENVPN.PROTO.udp;
 			return protoVal;
 		}
 	}
-	return OPENVPN.PROTO.UDP; // Default fallback matching standard OpenVPN defaults
+	return OPENVPN.PROTO.udp; // Default fallback matching standard OpenVPN defaults
 };
 
 /**
@@ -1445,7 +1450,7 @@ const renderRemoteNode = function (role, isRunning, connectedClients, protoStr, 
 			// Get the first part and convert to lowercase for the check
 			const firstPart = parts[0].toLowerCase();
 			// If first part is a protocol prefix, process and clean it
-			if (firstPart.indexOf(OPENVPN.PROTO.UDP) === 0 || firstPart.indexOf(OPENVPN.PROTO.TCP) === 0) {
+			if (firstPart.indexOf(OPENVPN.PROTO.udp) === 0 || firstPart.indexOf(OPENVPN.PROTO.tcp) === 0) {
 				// Remove everything after the dash (e.g. "tcp4-server" becomes "tcp4")
 				currentProto = firstPart.split('-')[0];
 				displayAddress = parts.slice(1).join(':'); // Keep only IP and port
