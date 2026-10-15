@@ -32,10 +32,12 @@ const view = L.view;
 const TXT = {
 	INFO: {
 		active: _('Active'),
+		add: _('Add'),
 		clearing: _('Clearing...'),
 		creating: _('Creating...'),
 		disable: _('Disable'),
 		disabled: _('Disabled'),
+		delete: _('Delete'),
 		export_profile: _('Export Profile'),
 		enable: _('Enable'),
 		error: _('Error'),
@@ -60,6 +62,7 @@ const TXT = {
 	BTN: {
 		add_client: _('Add Client Instance'),
 		add_server: _('Add Server Instance'),
+		backup: _('Backup'),
 		cancel: _('Cancel'),
 		change: _('Change'),
 		click_save_apply: _('Please click «Save & Apply».'),
@@ -70,6 +73,7 @@ const TXT = {
 		download_ovpn: _('Download (.ovpn)'),
 		enabled: _('Enabled'),
 		generating: _('Generating...'),
+		keygen: _('KeyGen'),
 		next: _('Next'),
 		ok: _('OK'),
 		processing: _('Processing...'),
@@ -84,6 +88,8 @@ const TXT = {
 	},
 	MSG: {
 		client_export: _('OpenVPN Client Export'),
+		backup_export: _('OpenVPN Backup Export'),
+		backup_import: _('OpenVPN Backup Import'),
 		default_config_detected: _('OpenVPN Default Configuration Detected'),
 		config_changed_reload: _('Configuration changed! Applying will temporarily restart the OpenVPN instance.'),
 		confirm_del: _('Are you sure you want to delete '),
@@ -93,7 +99,7 @@ const TXT = {
 		export_ovpn: _('Export (.ovpn)'),
 		export_openvpn_connect_client_profile: _('Export OpenVPN Connect Client Profile'),
 		import_ovpn: _('Import (.ovpn)'),
-		import_openvpn_connect_client_profile: _('Import OpenVPN Connect Client Profile'),
+		import_openvpn_client_profile: _('Import OpenVPN Client Profile'),
 		import_profile: _('Import Profile'),
 		lan_to_lan_profile_selection: _('LAN-to-LAN Router Profile Selection'),
 		manage_instance: _('Here you can manage multiple OpenVPN Server and Client instances dynamically.'),
@@ -101,12 +107,15 @@ const TXT = {
 		no_active_log_entries: _('No active OpenVPN log entries found.'),
 		no_vpn_configured: _('No OpenVPN instances configured yet. Use the Wizard to create new OpenVPN instances.'),
 		no_vpn_log: _('No active OpenVPN log entries found.'),
-		office_profile: _('Office Profile:'),
+		remote_profile: _('Remote Profile'),
+		backup_server_profile: _('Backup Server Profile'),
+		delete_remote_profile: _('Delete Remote Profile...'),
 		placeholder_cn_mobile: _('e.g. my-smartphone'),
 		please_assign_cn_name: _('Please assign a unique device name (Common Name) for this mobile profile:'),
 		process_take_few_minutes: _('This automated initialization process can take a few minutes on your device...'),
 		scan_qr_code_with_camera: _('Scan QR Code with Mobile Phone Camera:'),
 		secure_temporary_profile_url: _('Secure Temporary Profile URL Field:'),
+		select_clients_to_remove: _('Select clients to remove:'),
 		select_remote_office_to_export: _('This server handles network rules for multiple remote offices. Please choose an existing office name or write a name to make a new connection profile.'),
 		system_logs: _('System logs ...'),
 		uploaded_file_invalid: _('Uploaded file is invalid or corrupt!'),
@@ -136,12 +145,12 @@ const TXT = {
 	KEY: {
 		ca: _('Certification Authority'),
 		client_connection_needs_server_key_and_config: _('A client connection needs the server keys and config. Select an .ovpn profile to import them automatically, or click Cancel to use the default settings.'),
-		create_key_new_office: _('Create keys for a new office...'),
+		create_key_new_office: _('Create keys for a new remote office...'),
+		create_key_new_mobile: _('Create keys for a new mobile client...'),
 		dh: _('Diffie - Hellman Parameters'),
-		key_verification_failed: _('Key verification failed'),
-		keygen: _('KeyGen'),
 		keygen_in_progress: _('Key generation in progress...'),
 		keygen_wait: _('Please wait while secure cryptographic, router-unique default assets are being generated.'),
+		log_crt_completed_tls_client_keygen: _('LOG: Certificate pipeline completed. Generating TLS crypt v2 client key...'),
 		keyfile_not_exist: _('Key file is empty or does not exist on disk yet.'),
 		openvpn_keys: _('OpenVPN Keys'),
 		server_crt: _('Server Certificate'),
@@ -172,11 +181,16 @@ const TXT = {
 		key_check_failed: _('Key check failed. One security key is broken or invalid.'),
 		keygen_failed: _('Key generation failed.'),
 		key_type_mismatch: _('Key type mismatch'),
+		key_verification_failed: _('Key verification failed'),
 		ip_used_on_other_office: _('Error: This IP address is already used by another office. Every office needs a different IP address!'),
 		office_name_already_exist: _('Error: An office with this name is already in the list.'),
 		use_local_ipnetwork: _('Error: You cannot use this IP network! It is the local network of this router and will block all traffic.'),
 		upload_key_empty: _('The uploaded file is empty.'),
-		wrong_key_type: _('Wrong key type! Please upload the correct cryptographic file.')
+		wrong_key_type: _('Wrong key type! Please upload the correct cryptographic file.'),
+		failed_generate_profile_download: _('Failed to generate secure download profile. Please check system logs.'),
+		profile_generation_error: _('Profile Generation Error'),
+		network_status_check_failed: _('Error: Network status check failed.'),
+		tls_client_keygen_failed: _('TLS crypt v2 client key generation failed')
 	}
 }
 
@@ -205,6 +219,7 @@ const CFG = Object.freeze({
 	}),
 	LIBEXEC: Object.freeze({
 		luci_app_openvpn_plus: '/usr/libexec/luci-app-openvpn-plus',
+		getl3dev: 'getl3dev',
 		lanip: 'lanip',
 		bestcrypto: 'bestcrypto',
 		readfile: 'readfile',
@@ -240,15 +255,15 @@ const CFG = Object.freeze({
 		instance: 'instance',
 		openvpn_logread: 'openvpn',
 		openvpn_log_stamp: 'openvpn_log_stamp',
-		fwPort: 'fwPort',
-		fwProto: 'fwProto',
 		fw_openvpn_rule: 'openvpn_rule_',
 		fw_openvpn_inc: 'openvpn_inc_',
+		fw_openvpn_jmp_inc: 'openvpn_jmp_inc_',
 		fw_openvpn_s2s_inc: 'openvpn_s2s_inc_',
 		fw_openvpn_zone: 'openvpn_zone_',
 		fw_openvpn_fwd_lan: 'openvpn_fwd_lan_',
 		fw_openvpn_fwd_vpn: 'openvpn_fwd_vpn_',
 		fw_openvpn_server: 'openvpn_server_',
+		fw_openvpn_floodguard: 'openvpn_floodguard_'
 	}),
 	CONF: Object.freeze({
 		modern_vpn_client: '# Modern OpenVPN Client Configuration Instance',
@@ -281,6 +296,7 @@ const CFG = Object.freeze({
 
 const ICON = Object.freeze({
 	ARROW: '➔ ',
+	BACKUP: '📦 ',
 	CHECK: '✓ ',
 	CHANGE: '✏️ ',
 	OFFICE: '🏢 ',
@@ -314,8 +330,8 @@ const OPENVPN = Object.freeze({
 		SITETOSITE: 'sitetosite'
 	}),
 	PROTO: Object.freeze({
-		UDP: 'udp',
-		TCP: 'tcp'
+		udp: 'udp',
+		tcp: 'tcp'
 	}),
 	PORT: Object.freeze({
 		s1194: '1194',
@@ -400,9 +416,15 @@ const nativeFileExecRpc = L.rpc.declare({
 const luci_app_openvpn_plus = async function (args, skipTrim) {
 	const extraArgs = (typeof args === 'string') ? [args] : (Array.isArray(args) ? args : []);
 	const res = await L.resolveDefault(nativeFileExecRpc(CFG.LIBEXEC.luci_app_openvpn_plus, extraArgs), {});
+
+	// CHECK EXIT CODE: If the backend returned anything else than 0, it failed!
+	if (res && typeof res === 'object' && res.code !== undefined && res.code !== 0) {
+		return 'ERROR: CODE_' + res.code;
+	}
 	if (res && typeof res === 'object' && typeof res.stdout === 'string') {
 		if (skipTrim === true) {
-			return res.stdout.trim();
+			// Remove ONLY the very last trailing newline character cleanly
+			return res.stdout.replace(/\r?\n$/, '');
 		} else {
 			return res.stdout.trim();
 		}
@@ -474,15 +496,11 @@ const secureRemoveFile = async function (filepath) {
  */
 const secureStatFile = async function (filepath) {
 	const res = await luci_app_openvpn_plus([CFG.LIBEXEC.statfile, filepath]);
-	try {
-		if (res && res.startsWith("{")) {
-			const statObj = JSON.parse(res);
-			if (statObj && typeof statObj === 'object') {
-				return statObj;
-			}
+	if (res && res.startsWith("{")) {
+		const statObj = JSON.parse(res);
+		if (statObj && typeof statObj === 'object') {
+			return statObj;
 		}
-	} catch (err) {
-		console.error("Failed to parse file statistics: ", CFG.LIBEXEC.luci_app_openvpn_plus + ' ' + CFG.LIBEXEC.statfile + ' ' + filepath + ' -> ' + err);
 	}
 	return null;
 };
@@ -496,13 +514,16 @@ const secureFileCallbacks = Object.freeze({
 	luci_app_openvpn_plus: luci_app_openvpn_plus
 });
 
-
-// Checks if a specific OpenVPN instance is enabled directly in the live UCI buffer
+/**
+ * Checks if a specific OpenVPN instance is enabled directly in the live UCI buffer
+ */
 const isInstanceEnabled = function (instance_id) {
 	return L.uci.get(CFG.CMD.openvpn, instance_id, 'enabled') === '1';
 };
 
-// Checks if at least one OpenVPN instance is active inside the provided configuration array
+/**
+ * Checks if at least one OpenVPN instance is active inside the provided configuration array
+ */
 const isAnyInstanceEnabled = function (ovpnUciSections) {
 	const ovpnSections = Array.isArray(ovpnUciSections) ? ovpnUciSections : [];
 
@@ -513,39 +534,109 @@ const isAnyInstanceEnabled = function (ovpnUciSections) {
 };
 
 /**
+ * Get InstanceID with instance number
+ */
+const getInstanceIdFromNumber = function (instances, instNumber) {
+	let inst = null;
+	if (instances) {
+		for (let i = 0; i < instances.length; i++) {
+			if (instances[i].instNum === instNumber) {
+				return instances[i].id;
+			}
+		}
+	}
+	return inst;
+}
+
+/**
  * Calculates a SHA256 hash using the privileged backend helper
  */
 const sha256sum = async function (textToHash) {
 	const res = await luci_app_openvpn_plus([CFG.LIBEXEC.openssldgst, '-sha256', String(textToHash || '')]);
-	if (res.length > 0) {
-		const parts = res.trim().split(/\s+/);
-		return (parts && parts[0]) ? parts[0] : '';
-	} else {
-		return '';
+
+	// 1. Check if the response is empty or contains a backend error code
+	if (!res || res.length === 0 || res.startsWith('ERROR:')) {
+		console.error("SHA256 calculation failed because the backend returned an error.");
+		return 'ERROR';
 	}
+
+	// 2. Parse the verified output from openSSL
+	const parts = res.trim().split(/\s+/);
+	const potentialHash = (parts && parts[0]) ? parts[0] : '';
+
+	// 3. Extra security check: A real SHA256 string must be exactly 64 characters long
+	if (potentialHash.length === 64) {
+		return potentialHash;
+	}
+
+	return 'ERROR';
+};
+
+/**
+ * Validate and clean any given IPv4 or IPv6 address string safely
+ */
+const checkIp = function (rawIp) {
+	if (!rawIp) {
+		return null;
+	}
+
+	// Delete all spaces, tabs and hidden lines from the text (tr -d ' \t\r\n')
+	const ip = rawIp.replace(/[\s\t\r\n]/g, '').trim();
+	if (ip === '') {
+		return null;
+	}
+
+	const ipv4Regex = /^([0-9]{1,3}\.){3}[0-9]{1,3}$/;
+	const ipv6Regex = /^([\da-fA-F]{1,4}:|:){1,7}([\da-fA-F]{1,4}|:)$/;
+
+	// Case 1: Check if the text is a valid IPv4 address (numbers 0 to 255)
+	if (ipv4Regex.test(ip)) {
+		const segments = ip.split('.');
+		if (parseInt(segments[0], 10) <= 255 &&
+			parseInt(segments, 10) <= 255 &&
+			parseInt(segments, 10) <= 255 &&
+			parseInt(segments, 10) <= 255) {
+			return { ip: ip, isV6: false };
+		}
+	}
+
+	// Case 2: Check if the text is a syntactically valid IPv6 address. Extra check for triple colons (:::) to keep the regex small
+	if (ipv6Regex.test(ip) && ip.indexOf(':') !== -1 && ip.indexOf(':::') === -1) {
+		return { ip: ip.toLowerCase(), isV6: true };
+	}
+
+	return null;
 };
 
 /**
  * Global helper function to determine the fallback IP and mask from browser or UCI config.
  */
 const getHostnameFallback = function (returnMask) {
-	// Basic regex patterns to check for valid IPv4 or IPv6 layouts
-	const ipv4Pattern = /^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$/;
-	const ipv6Pattern = /^(([0-9a-fA-F]{1,4}:){1,7}|:)(:[0-9a-fA-F]{1,4}){1,7}$|^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
-
 	// Get the address string from the browser URL bar and remove IPv6 brackets
-	let ip = (window.location.hostname || "").trim().replace(/^\[|\]$/g, '');
+	let browserIp = (window.location.hostname || "").trim().replace(/^\[|\]$/g, '');
+	let ip = '';
 	let mask = '255.255.255.0';
 
-	// If browser URL is text (like openwrt.lan), fallback to configured UCI IPs
-	if (!ipv4Pattern.test(ip) && !ipv6Pattern.test(ip)) {
-		ip = L.uci.get('network', 'lan', 'ipaddr') || L.uci.get('network', 'lan', 'ip6addr') || '192.168.1.1';
+	// Use our solid validation function to check the browser IP
+	let checked = checkIp(browserIp);
+
+	if (checked) {
+		ip = checked.ip;
+	} else {
+		// If browser URL is a hostname (like openwrt.lan), fallback to configured UCI IPs
+		let uciIp = L.uci.get('network', 'lan', 'ipaddr') || L.uci.get('network', 'lan', 'ip6addr') || '192.168.1.1';
+
+		// Remove any trailing subnet mask from UCI strings (like /64) safely
+		ip = uciIp.split('/')[0].trim();
+
+		// Re-validate the UCI fallback IP to know its family (v4 or v6)
+		checked = checkIp(ip);
 	}
 
 	// Set the matching subnet mask format based on the detected IP family
-	if (ipv4Pattern.test(ip)) {
+	if (checked && checked.isV6 === false) {
 		mask = L.uci.get('network', 'lan', 'netmask') || OPENVPN.IPv4.MASK24;
-	} else if (ipv6Pattern.test(ip)) {
+	} else if (checked && checked.isV6 === true) {
 		mask = L.uci.get('network', 'lan', 'ip6assign') || '64';
 	}
 
@@ -557,7 +648,7 @@ const getHostnameFallback = function (returnMask) {
 };
 
 /**
- * Memory buffer and timestamp to cache the land and public IP string
+ * Memory buffer and timestamp to cache the lan and public IP string
  */
 const netCache = {
 	LanIp: null,
@@ -570,73 +661,102 @@ const netCache = {
 };
 
 /**
- * Get LAN IP with local cache
+ * Get LAN IP with local cache and secure error handling
  */
 const getLanIp = async function (force) {
 	const now = new Date().getTime();
+
+	// 1. Return cached value if it is still fresh and valid
 	if (force !== true && netCache.LanIp !== null && Math.abs(now - netCache.LanIpTime) < netCache.TIMEOUT) {
 		return netCache.LanIp;
 	}
+
+	// 2. Query the backend for the current LAN IP
 	const lanIp = await luci_app_openvpn_plus([CFG.LIBEXEC.lanip]);
-	if (lanIp.length > 0) {
-		netCache.LanIp = lanIp;
-		netCache.LanIpTime = new Date().getTime();
-		return lanIp;
+
+	// 3. Catch errors or empty strings from the backend immediately
+	if (!lanIp || lanIp.length === 0 || lanIp.startsWith('ERROR')) {
+		return getHostnameFallback(false);
 	}
-	return getHostnameFallback(false);
+
+	// 4. If the IP is valid, save it to the cache and return it
+	netCache.LanIp = lanIp;
+	netCache.LanIpTime = new Date().getTime();
+	return lanIp;
 };
+
 /**
- * Get LAN IP and Mask with local cache
+ * Get LAN IP and Mask with local cache and secure error handling
  */
 const getLanIpMask = async function (force) {
 	const now = new Date().getTime();
+
+	// 1. Return cached values if they are still fresh and valid
 	if (force !== true && netCache.LanIpMask !== null && Math.abs(now - netCache.LanIpMaskTime) < netCache.TIMEOUT) {
 		return netCache.LanIpMask;
 	}
+
+	// 2. Query the backend for the current IP and CIDR mask
 	const res = await luci_app_openvpn_plus([CFG.LIBEXEC.lanip, CFG.CMD.cidr]);
-	if (res.length > 0) {
-		const parts = res.split('/');
-		if (parts.length === 2) {
-			const inputIp = parts[0];
-			let inputMask = parts[1];
 
-			// Only run the bit-shifting calculation if it is a standard IPv4 address
-			if (inputIp.indexOf('.') !== -1) {
-				const inlinePrefix = parseInt(parts[1], 10) || 24;
-				const maskArray = [0, 0, 0, 0];
-
-				// Rebuild explicit netmask format string from the prefix bits
-				for (let bit4 = 0; bit4 < 32; bit4++) {
-					if (bit4 < inlinePrefix) {
-						maskArray[Math.floor(bit4 / 8)] |= (1 << (7 - (bit4 % 8)));
-					}
-				}
-				inputMask = maskArray.join('.');
-			}
-			netCache.LanIpMask = { ip: inputIp, mask: inputMask };
-			netCache.LanIpMaskTime = new Date().getTime();
-			return netCache.LanIpMask;
-		}
+	// 3. Catch errors or empty strings from the backend immediately
+	if (!res || res.length === 0 || res.startsWith('ERROR')) {
+		// Secure fallback without breaking the calculation
+		return getHostnameFallback(true);
 	}
+
+	// 4. Process the verified backend output
+	const parts = res.split('/');
+	if (parts.length === 2) {
+		const inputIp = parts[0];
+		let inputMask = parts[1];
+
+		// Only run the bit-shifting calculation if it is a standard IPv4 address
+		if (inputIp.indexOf('.') !== -1) {
+			const inlinePrefix = parseInt(parts[1], 10) || 24;
+			const maskArray = [0, 0, 0, 0];
+
+			// Rebuild explicit netmask format string from the prefix bits
+			for (let bit4 = 0; bit4 < 32; bit4++) {
+				if (bit4 < inlinePrefix) {
+					maskArray[Math.floor(bit4 / 8)] |= (1 << (7 - (bit4 % 8)));
+				}
+			}
+			inputMask = maskArray.join('.');
+		}
+		netCache.LanIpMask = { ip: inputIp, mask: inputMask };
+		netCache.LanIpMaskTime = new Date().getTime();
+		return netCache.LanIpMask;
+	}
+
 	return getHostnameFallback(true);
 };
 
 /**
- * Get public WAN IP with local cache.
+ * Get public WAN IP with local cache and secure error handling
  */
 const queryPublicIp = async function (force) {
 	const currentHost = window.location.hostname;
 	const currentTime = Date.now();
+
+	// 1. Return cached value if it is still fresh and valid
 	if (force !== true && netCache.PublicIp !== null && Math.abs(currentTime - netCache.PublicIpTime) < netCache.TIMEOUT) {
 		return netCache.PublicIp;
 	}
+
+	// 2. Query the backend for the public IP
 	const cleanIp = await luci_app_openvpn_plus([CFG.LIBEXEC.publicip]);
-	if (cleanIp.length > 0) {
-		netCache.PublicIp = cleanIp;
-		netCache.PublicIpTime = currentTime;
-		return cleanIp;
+
+	// 3. Catch errors or empty strings from the backend immediately
+	if (!cleanIp || cleanIp.length === 0 || cleanIp.startsWith('ERROR')) {
+		// Secure fallback without corrupting the global cache
+		return currentHost;
 	}
-	return currentHost;
+
+	// 4. If the IP is valid, save it to the cache and return it
+	netCache.PublicIp = cleanIp;
+	netCache.PublicIpTime = currentTime;
+	return cleanIp;
 };
 
 /**
@@ -675,12 +795,14 @@ const getDdnsOrPublicIp = async function (instObj) {
 	// 2. Resolve the domain we found or run the public IP fallback
 	if (foundDomain) {
 		const resolvedIp = await luci_app_openvpn_plus([CFG.LIBEXEC.checkddns, foundDomain]);
-		if (resolvedIp.length > 0) {
+
+		// Catch errors or empty strings from the DDNS backend resolver immediately
+		if (resolvedIp && resolvedIp.length > 0 && !resolvedIp.startsWith('ERROR')) {
 			return resolvedIp;
 		}
 	}
 
-	// 3. fallback if domain fails or is completely empty
+	// 3. Fallback if domain fails, is completely empty, or returned a backend error
 	return await queryPublicIp(false);
 };
 
@@ -692,10 +814,12 @@ const cleanIpOrDomain = async function (rawString) {
 		return '';
 	}
 	const cleaned = await luci_app_openvpn_plus([CFG.LIBEXEC.cleanipdns, rawString]);
-	if (cleaned.length > 0) {
-		return cleaned;
+
+	// Catch backend errors immediately and return the uncleaned rawString as fallback
+	if (!cleaned || cleaned.length === 0 || cleaned.startsWith('ERROR')) {
+		return rawString;
 	}
-	return rawString;
+	return cleaned;
 };
 
 /**
@@ -705,17 +829,22 @@ const checkDdns = async function (targetHost) {
 	if (!targetHost) {
 		return { success: false, response: '' };
 	}
-	try {
-		const res = await luci_app_openvpn_plus([CFG.LIBEXEC.checkddns, targetHost]);
-		if (res.length > 0) {
-			return {
-				success: true,
-				response: res
-			};
-		}
-	} catch {
-		return { success: false, response: '' };
+
+	const res = await luci_app_openvpn_plus([CFG.LIBEXEC.checkddns, targetHost]);
+
+	// 1. Catch errors or empty strings from the backend immediately
+	if (!res || res.length === 0 || res.startsWith('ERROR')) {
+		return {
+			success: false,
+			response: res || 'ERROR'
+		};
 	}
+
+	// 2. If the response is valid and online, return success
+	return {
+		success: true,
+		response: res
+	};
 };
 
 /**
@@ -725,11 +854,18 @@ const checkPort = async function (targetHost, externalPort, internalPort, protoc
 	if (!targetHost || !externalPort || !internalPort || !protocol) {
 		return false;
 	}
+
 	const protoStr = protocol.toLowerCase();
 	const res = await luci_app_openvpn_plus([CFG.LIBEXEC.checkport, targetHost, externalPort, internalPort, protoStr]);
+	if (res && res.startsWith('ERROR')) {
+		return false;
+	}
+
+	// Verify if the backend tool officially confirmed the port status
 	if (res === 'PORT_OPEN') {
 		return true;
 	}
+
 	return false;
 };
 
@@ -740,10 +876,17 @@ const checkStaticRoute = async function (wanIp, remoteNet) {
 	if (!wanIp || !remoteNet) {
 		return false;
 	}
+
 	const res = await luci_app_openvpn_plus([CFG.LIBEXEC.checksroute, wanIp, remoteNet]);
+	if (res && res.startsWith('ERROR')) {
+		return false;
+	}
+
+	// Verify if the backend tool officially confirmed the route status
 	if (res === 'ROUTE_OPEN') {
 		return true;
 	}
+
 	return false;
 };
 
@@ -755,12 +898,21 @@ const updateDdnsProvider = async function (updateUrl, domain) {
 		return null;
 	}
 	const responseText = await luci_app_openvpn_plus([CFG.LIBEXEC.wgetddns, updateUrl, domain]);
-	if ((responseText.length > 0) && (responseText.toLowerCase().indexOf('success') !== -1)) {
+	if (!responseText || responseText.length === 0 || responseText.startsWith('ERROR')) {
+		return {
+			raw: responseText || 'ERROR',
+			isError: true
+		};
+	}
+
+	// Check if the response from the provider explicitly contains the 'success' keyword
+	if (responseText.toLowerCase().indexOf('success') !== -1) {
 		return {
 			raw: responseText,
 			isError: false
 		};
 	}
+
 	return {
 		raw: responseText,
 		isError: true
@@ -857,7 +1009,7 @@ const checkNetworkStructure = function (appData) {
 						gatewayIp = gw4;
 					}
 
-					// Check WAN IPv4 addresses for Double NAT and extract WAN net-boundaries securely [sh]
+					// Check WAN IPv4 addresses for Double NAT and extract WAN net-boundaries securely
 					const ipaddrs = net.getIPAddrs ? net.getIPAddrs() : [];
 					let deviceMask = (net.getNetmask && net.getNetmask()) ? net.getNetmask() : (net.data && net.data.netmask) ? net.data.netmask : null;
 					if (deviceMask === null || deviceMask === undefined || deviceMask === '') {
@@ -869,7 +1021,7 @@ const checkNetworkStructure = function (appData) {
 						const wanIpStr = String(rawWanIp);
 						const ip = wanIpStr.split('/')[0];
 
-						// If the WAN IP is private, we have a Double NAT [sh]
+						// If the WAN IP is private, we have a Double NAT
 						if (privateIpRegex.test(ip)) {
 							isDoubleNat = true;
 						}
@@ -896,7 +1048,7 @@ const checkNetworkStructure = function (appData) {
 					gatewayIp = OPENVPN.IPv4.ZERO;
 				}
 
-				// Set values to global object (Fixed: changed 'gateway' to 'gatewayIp')
+				// Set values to global object
 				networkStructure.doubleNat = isDoubleNat;
 				networkStructure.apMode = isApMode;
 				networkStructure.gateway = gatewayIp;
@@ -930,6 +1082,7 @@ const checkNetworkStructure = function (appData) {
  */
 const networkCallbacks = ({
 	sha256sum: sha256sum,
+	checkIp: checkIp,
 	getLanIp: getLanIp,
 	queryPublicIp: queryPublicIp,
 	getDdnsOrPublicIp: getDdnsOrPublicIp,
@@ -1008,16 +1161,17 @@ const getServerIpv6SubnetFromInstNum = function (instNum) {
  * Executes a hardware cpu check to determine and return if the optimal cipher is AES
  */
 const checkOptimalDataCipherAES = async function () {
-
 	const res = await luci_app_openvpn_plus([CFG.LIBEXEC.bestcrypto]);
-	if (res.length > 0) {
-		if (res === 'AES') {
-			return true
-		} else {
-			return false;
-		}
+	if (!res || res.length === 0 || res.startsWith('ERROR')) {
+		console.warn("Hardware crypto check failed. Backend returned an error. Falling back to default AES cipher.");
+		return true;
 	}
-	return true;
+
+	if (res === 'AES') {
+		return true;
+	} else {
+		return false;
+	}
 };
 
 /**
@@ -1100,7 +1254,7 @@ const generateServerConfig = async function (appData, newInstanceItem, wizardPar
 	const instNum = newInstanceItem.instNum;
 
 	const chosenPort = (wizardParams && wizardParams.port) ? wizardParams.port : newInstanceItem.port;
-	const chosenProto = (wizardParams && wizardParams.proto) ? wizardParams.proto : OPENVPN.PROTO.UDP;
+	const chosenProto = (wizardParams && wizardParams.proto) ? wizardParams.proto : OPENVPN.PROTO.udp;
 	const displayName = (wizardParams && wizardParams.displayName) ? wizardParams.displayName.trim() : '';
 
 	// Calculate the external client port target safely
@@ -1142,7 +1296,7 @@ const generateServerConfig = async function (appData, newInstanceItem, wizardPar
 	}
 
 	let blocksToRemove = [];
-	if (chosenProto === OPENVPN.PROTO.UDP) {
+	if (chosenProto === OPENVPN.PROTO.udp) {
 		// remove tls_timeout_5 if runing on UDP
 		config = config.replace(CFG.CONF.tls_timeout_5, '');
 	} else {
@@ -1288,7 +1442,7 @@ const generateServerConfig = async function (appData, newInstanceItem, wizardPar
  * Finds the last active server ID, its configuration port number, and its protocol (udp/tcp)
  */
 const getLastServerIdAndPort = function (currentId, defaultPort, appData) {
-	const result = { id: currentId, port: defaultPort, proto: OPENVPN.PROTO.UDP };
+	const result = { id: currentId, port: defaultPort, proto: OPENVPN.PROTO.udp };
 
 	if (!appData || !Array.isArray(appData.instances)) {
 		return result;
@@ -1369,7 +1523,7 @@ const generateClientConfig = async function (appData, newInstanceItem, wizardPar
 		config = config.replace(CFG.CONF.data_ciphers_aes, CFG.CONF.data_ciphers_comment + "\n" + CFG.CONF.data_ciphers_chacha);
 	}
 
-	if (chosenProto === OPENVPN.PROTO.TCP) {
+	if (chosenProto === OPENVPN.PROTO.tcp) {
 		// remove explicit-exit-notify 1, mssfix 1360 and tun-mtu 1420 if running on TCP
 		config = config.replace(CFG.CONF.explicit_exit_notify, '');
 		config = config.replace(CFG.CONF.mssfix_1360, '');
@@ -1391,63 +1545,96 @@ const generateClientConfig = async function (appData, newInstanceItem, wizardPar
 /**
  * Compiles the final standalone .ovpn profile text with embedded keys
  */
-const compileOvpnProfileText = async function (cname, targetHost, targetPort, proto, cryptoAssets, appData, instNum, isSiteToSite) {
+const compileOvpnProfileText = async function (cname, targetHost, targetPort, proto, cryptoAssets, appData, instNum, isSiteToSite, backup) {
 
-	const optimalDataCipherAES = await checkOptimalDataCipherAES();
+	let ovpn = '';
 
-	let new_remote = 'remote ' + targetHost + ' ' + targetPort;
-	if (isSiteToSite) {
-		const localLan = await getLanIpMask(true);
-		const localSubnet = appData.statusClass.netIPCIDR(localLan.ip, localLan.mask);
-		new_remote = new_remote + '\nsetenv remotelan ' + localSubnet;
-	}
+	if (backup) {
 
-	// Remove old crypto key references - ovpn profile comes with embedded keys
-	let ovpn = appData.clientTemplate
-		.replace(CFG.CONF.modern_vpn_client, CFG.CONF.modern_vpn_client + ' #' + instNum + ' (' + cname + ')')
-		.replace(CFG.CONF.certificate_and_keys_comment, '')
-		.replace(/^ca\s+\S+\r?\n/m, '')
-		.replace(/^cert\s+\S+\r?\n/m, '')
-		.replace(/^key\s+\S+\r?\n/m, '')
-		.replace(/^tls-crypt-v2\s+\S+\r?\n/m, '')
-		.replace(/^remote\s+\S+\s+\d+/m, new_remote)
-		.replace(/^proto\s+\S+/m, 'proto ' + proto);
+		if (cryptoAssets.conf) {
+			ovpn += cryptoAssets.conf + '\n\n'
+		}
+		if (cryptoAssets.ca) {
+			ovpn += '<ca>\n' + cryptoAssets.ca.trim() + '\n</ca>\n\n';
+		}
+		if (cryptoAssets.cert) {
+			ovpn += '<cert>\n' + cryptoAssets.cert.trim() + '\n</cert>\n\n';
+		}
+		if (cryptoAssets.key) {
+			ovpn += '<key>\n' + cryptoAssets.key.trim() + '\n</key>\n\n';
+		}
+		if (cryptoAssets.tlsCrypt) {
+			ovpn += '<tls-crypt-v2>\n' + cryptoAssets.tlsCrypt.trim() + '\n</tls-crypt-v2>\n\n';
+		}
+		const instance_id = getInstanceIdFromNumber(appData.instances, instNum);
+		let dh = await secureReadFile(CFG.FILE.dir_keys + 'dh_' + instance_id + '.pem');
+		if (dh) {
+			dh = dh.trim();
+			if (dh.length > 0) {
+				ovpn += '<dh>\n' + dh + '\n</dh>\n\n';
+			}
+		}
+	} else {
 
-	if (isSiteToSite !== true) {
-		ovpn = ovpn.replace(/^.*openvpn\.instance\.status.*\n/m, '')
-		ovpn = ovpn.replace(/^.*status-version.*\n/m, '')
-	}
+		const optimalDataCipherAES = await checkOptimalDataCipherAES();
 
-	if (!optimalDataCipherAES) {
-		ovpn = ovpn.replace(CFG.CONF.data_ciphers_aes, CFG.CONF.data_ciphers_comment + '\n' + CFG.CONF.data_ciphers_chacha);
-	}
+		let new_remote = 'remote ' + targetHost + ' ' + targetPort;
+		if (isSiteToSite) {
+			const localLan = await getLanIpMask(true);
+			const localSubnet = appData.statusClass.netIPCIDR(localLan.ip, localLan.mask);
+			new_remote = new_remote + '\nsetenv remotelan ' + localSubnet;
+		}
 
-	if (proto === OPENVPN.PROTO.TCP) {
-		ovpn = ovpn.replace(CFG.CONF.mssfix_1360, '');
-		ovpn = ovpn.replace(CFG.CONF.tun_mtu_1420, '');
-	}
+		// Remove old crypto key references - ovpn profile comes with embedded keys
+		ovpn = appData.clientTemplate
+			.replace(CFG.CONF.modern_vpn_client, CFG.CONF.modern_vpn_client + ' #' + instNum + ' (' + cname + ')')
+			.replace(CFG.CONF.certificate_and_keys_comment, '')
+			.replace(/^ca\s+\S+\r?\n/m, '')
+			.replace(/^cert\s+\S+\r?\n/m, '')
+			.replace(/^key\s+\S+\r?\n/m, '')
+			.replace(/^tls-crypt-v2\s+\S+\r?\n/m, '')
+			.replace(/^remote\s+\S+\s+\d+/m, new_remote)
+			.replace(/^proto\s+\S+/m, 'proto ' + proto);
 
-	// Collapse three or more consecutive newlines down to exactly one empty line
-	ovpn = ovpn.replace(/\n{3,}/g, '\n\n');
-	ovpn += 'setenv client-cname ' + cname + '\n\n';
+		if (isSiteToSite !== true) {
+			ovpn = ovpn.replace(/^.*openvpn\.instance\.status.*\n/m, '')
+			ovpn = ovpn.replace(/^.*status-version.*\n/m, '')
+		}
 
-	if (cryptoAssets.ca && typeof cryptoAssets.ca.trim === 'function') {
-		const rawCa = cryptoAssets.ca.trim();
-		const cleanCa = rawCa.replace(/-----BEGIN[^\n]*PRIVATE KEY-----[\s\S]*?-----END[^\n]*PRIVATE KEY-----\n*/g, '');
-		ovpn += '<ca>\n' + cleanCa.trim() + '\n</ca>\n\n';
-	}
+		if (!optimalDataCipherAES) {
+			ovpn = ovpn.replace(CFG.CONF.data_ciphers_aes, CFG.CONF.data_ciphers_comment + '\n' + CFG.CONF.data_ciphers_chacha);
+		}
 
-	if (cryptoAssets.cert && typeof cryptoAssets.cert.trim === 'function') {
-		ovpn += '<cert>\n' + cryptoAssets.cert.trim() + '\n</cert>\n\n';
-	}
+		if (proto === OPENVPN.PROTO.tcp) {
+			ovpn = ovpn.replace(CFG.CONF.mssfix_1360, '');
+			ovpn = ovpn.replace(CFG.CONF.tun_mtu_1420, '');
+		}
 
-	if (cryptoAssets.key && typeof cryptoAssets.key.trim === 'function') {
-		ovpn += '<key>\n' + cryptoAssets.key.trim() + '\n</key>\n\n';
-	}
+		// Collapse three or more consecutive newlines down to exactly one empty line
+		ovpn = ovpn.replace(/\n{3,}/g, '\n\n');
+		if (!ovpn.endsWith('\n')) {
+			ovpn += '\n';
+		}
 
-	// Embedded client asset delivery wrapped into modern asymmetric tls-crypt-v2 XML layout tags
-	if (cryptoAssets.tlsCrypt && typeof cryptoAssets.tlsCrypt.trim === 'function' && cryptoAssets.tlsCrypt.trim()) {
-		ovpn += '<tls-crypt-v2>\n' + cryptoAssets.tlsCrypt.trim() + '\n</tls-crypt-v2>\n';
+		ovpn += '\n' + 'setenv client-cname ' + cname + '\n\n';
+
+		if (cryptoAssets.ca) {
+			const rawCa = cryptoAssets.ca.trim();
+			const cleanCa = rawCa.replace(/-----BEGIN[^\n]*PRIVATE KEY-----[\s\S]*?-----END[^\n]*PRIVATE KEY-----\n*/g, '');
+			ovpn += '<ca>\n' + cleanCa.trim() + '\n</ca>\n\n';
+		}
+
+		if (cryptoAssets.cert) {
+			ovpn += '<cert>\n' + cryptoAssets.cert.trim() + '\n</cert>\n\n';
+		}
+
+		if (cryptoAssets.key) {
+			ovpn += '<key>\n' + cryptoAssets.key.trim() + '\n</key>\n\n';
+		}
+
+		if (cryptoAssets.tlsCrypt) {
+			ovpn += '<tls-crypt-v2>\n' + cryptoAssets.tlsCrypt.trim() + '\n</tls-crypt-v2>\n';
+		}
 	}
 
 	return ovpn;
@@ -1494,9 +1681,6 @@ const syncInstanceFiles = async function (newInstanceItem, appData, wizardParams
 	if (isServer) {
 		filePromises.push(
 			initFile(CFG.FILE.dir_keys + 'dh_' + id + '.pem', CFG.FILE.dir_keys + CFG.FILE.dh_def_pem, newInstanceItem, appData, wizardParams)
-		);
-		filePromises.push(
-			initFile(CFG.FILE.dir_cfg + id + '.nft', CFG.FILE.dir_cfg + CFG.FILE.default_nft, newInstanceItem, appData, wizardParams)
 		);
 	}
 
@@ -1625,7 +1809,6 @@ const loadInstanceData = async function (appData) {
 };
 
 
-
 /**
  * --- SAVE AND RESTART ---
  */
@@ -1647,21 +1830,17 @@ const ovpnServiceStartStop = {
 			const targetAction = this.Action;
 			const targetInstance = this.Instance;
 			this.Instance = '';
+
+			// 1. Trigger the background service action safely without blocking the UI thread
 			setTimeout(async function () {
-				try {
-					await luci_app_openvpn_plus([CFG.LIBEXEC.ovpnservice, targetAction, targetInstance]);
-				} catch {
-					console.error('Asynchronous background OpenVPN service call failed: ' + CFG.LIBEXEC.luci_app_openvpn_plus + ' ' + CFG.LIBEXEC.ovpnservice + ' ' + targetAction + ' ' + targetInstance);
-				}
+				await luci_app_openvpn_plus([CFG.LIBEXEC.ovpnservice, targetAction, targetInstance]);
 			}, 0);
+
+			// 2. Trigger the UCI sorting routine if requested
 			if (this.uciSort === true) {
 				this.uciSort = false;
 				setTimeout(async function () {
-					try {
-						await luci_app_openvpn_plus([CFG.LIBEXEC.ucisortovpn]);
-					} catch {
-						console.error('Asynchronous background call "uci reorder openvpn.instanceX=Y" failed: ' + CFG.LIBEXEC.luci_app_openvpn_plus + ' ' + CFG.LIBEXEC.ucisortovpn);
-					}
+					await luci_app_openvpn_plus([CFG.LIBEXEC.ucisortovpn]);
 				}, 3000);
 			}
 		}
@@ -1676,7 +1855,7 @@ const ovpnPending = {
 	_t: null,
 	init: function (appData) {
 		if (appData) {
-			this._t = this._t = appData.statusClass.ovpnPending.trigger;
+			this._t = appData.statusClass.ovpnPending.trigger;
 		}
 	},
 	trigger: function () {
@@ -1806,7 +1985,7 @@ const uciSaveApplyRestart = async function (instance_id) {
 /**
  * Reads a profile file, tests keys with keymeta, and saves them to the router.
  */
-const importOvpnClientProfile = async function (ovpnContent, instanceId) {
+const importOvpnClientProfile = async function (ovpnContent, instanceId, appData) {
 	if (!ovpnContent || !ovpnContent.trim()) {
 		throw new Error(ICON.ERROR + TXT.ERROR.upload_key_empty);
 	}
@@ -1871,13 +2050,12 @@ const importOvpnClientProfile = async function (ovpnContent, instanceId) {
 		await secureWriteFile(CFG.FILE.dir_keys + tmpFile, currentBlock + '\n');
 
 		// Run keymeta to check if this key is good or bad
-		const res = await luci_app_openvpn_plus([CFG.LIBEXEC.keymeta, tmpFile]);
+		const keyInfo = await appData.keygenClass.getKeyMeta(tmpFile, luci_app_openvpn_plus);
 		await secureRemoveFile(CFG.FILE.dir_keys + tmpFile);
-		const metaReport = res.toUpperCase();
 
-		// Stop instantly if keymeta finds an error or trash text inside the file
-		if (metaReport.length == 0 || metaReport.indexOf('ERROR') !== -1) {
-			throw new Error(ICON.ERROR + TXT.ERROR.key_check_failed);
+		// Catch backend errors or empty responses immediately before parsing
+		if (keyInfo.valid === false) {
+			throw new Error(ICON.ERROR + ' ' + TXT.ERROR.key_check_failed);
 		}
 
 		// SORTING: Place keys into correct variables using their real crypto type from keymeta
@@ -1888,18 +2066,24 @@ const importOvpnClientProfile = async function (ovpnContent, instanceId) {
 			else if (currentItem.type === 'key') { keyContent = currentBlock; }
 			else if (currentItem.type === 'tlscrypt-v2') { tlsCryptContent = currentBlock; }
 		} else {
-			// Sorting path for pure keys.crt files based on actual crypto traits
-			if (metaReport.indexOf('AUTHORITY') !== -1 || metaReport.indexOf('CA:TRUE') !== -1) {
-				caContent = currentBlock;
-			}
-			else if (metaReport.indexOf('STANDARD CERTIFICATE') !== -1 || metaReport.indexOf('PUBLIC-KEY') !== -1) {
-				certContent = currentBlock;
-			}
-			else if ((metaReport.indexOf('PRIVATE-KEY') !== -1) || metaReport.indexOf('Private-Key') !== -1) {
-				keyContent = currentBlock;
-			}
-			else if (metaReport.indexOf('TLSv2-Client-Key') !== -1) {
-				tlsCryptContent = currentBlock;
+
+			let activeType = keyInfo.type;
+
+			// 3. CLEAN INTELLIGENT SORTING (Using our type Enum constants)
+			switch (activeType) {
+				case appData.keygenClass.CRYPTO_TYPE.CA_TRUE:
+					caContent = currentBlock;
+					break;
+				case appData.keygenClass.CRYPTO_TYPE.STANDARD_CERTIFICATE:
+				case appData.keygenClass.CRYPTO_TYPE.PUBLIC_KEY:
+					certContent = currentBlock;
+					break;
+				case appData.keygenClass.CRYPTO_TYPE.PRIVATE_KEY:
+					keyContent = currentBlock;
+					break;
+				case appData.keygenClass.CRYPTO_TYPE.TLS2_CLIENT_KEY:
+					tlsCryptContent = currentBlock;
+					break;
 			}
 		}
 	}
@@ -1948,11 +2132,125 @@ const importOvpnClientProfile = async function (ovpnContent, instanceId) {
 
 	return {
 		isCryptoUpdateOnly: false,
+		isServerBackup: false,
 		remoteServer: remoteServerMatch[1].trim(),
 		remoteServerLan: remoteServerLanMatch ? remoteServerLanMatch[1].trim() : '',
 		port: parseInt(remoteServerMatch[2], 10) || OPENVPN.PORT.n1194,
-		proto: protoMatch ? protoMatch[1].trim().toLowerCase() : OPENVPN.PROTO.UDP,
+		proto: protoMatch ? protoMatch[1].trim().toLowerCase() : OPENVPN.PROTO.udp,
 		cname: cnameMatch ? cnameMatch[1].trim() : ''
+	};
+};
+
+/**
+ * Imports a server backup profile, extracts keys, validates them, and prepares the configuration.
+ */
+const importOvpnBackupProfile = async function (ovpnContent, instanceId, appData) {
+	if (!ovpnContent || !ovpnContent.trim()) {
+		throw new Error(ICON.ERROR + ' ' + TXT.ERROR.upload_key_empty);
+	}
+
+	// Fix line endings for Windows, Mac, and Linux instantly
+	const content = sanitizeInputText(ovpnContent);
+
+	// Setup empty variables for the server assets
+	let confContent = "";
+	let caContent = "";
+	let certContent = "";
+	let keyContent = "";
+	let tlsCryptContent = "";
+	let dhContent = "";
+
+	// 1. Extract the embedded keys using regular expressions (XML tags)
+	const caXml = content.match(/<ca>([\s\S]*?)<\/ca>/);
+	const certXml = content.match(/<cert>([\s\S]*?)<\/cert>/);
+	const keyXml = content.match(/<key>([\s\S]*?)<\/key>/);
+	const tlsCryptXml = content.match(/<tls-crypt-v2>([\s\S]*?)<\/tls-crypt-v2>/);
+	const dhXml = content.match(/<dh>([\s\S]*?)<\/dh>/);
+
+	const blocksToScan = [];
+
+	if (caXml && caXml[1] && caXml[1].trim()) { blocksToScan.push({ type: 'ca', text: caXml[1].trim() }); }
+	if (certXml && certXml[1] && certXml[1].trim()) { blocksToScan.push({ type: 'cert', text: certXml[1].trim() }); }
+	if (keyXml && keyXml[1] && keyXml[1].trim()) { blocksToScan.push({ type: 'key', text: keyXml[1].trim() }); }
+	if (tlsCryptXml && tlsCryptXml[1] && tlsCryptXml[1].trim()) { blocksToScan.push({ type: 'tlscrypt-v2', text: tlsCryptXml[1].trim() }); }
+	if (dhXml && dhXml[1] && dhXml[1].trim()) { blocksToScan.push({ type: 'dh', text: dhXml[1].trim() }); }
+
+	// Safety check: A valid backup must have at least CA, Cert and Key tagged
+	if (!caXml || !certXml || !keyXml) {
+		throw new Error(ICON.ERROR + ' ' + TXT.ERROR.invalid_file_parts_missing);
+	}
+
+	// SCAN LOOP: Test every single key block with the keymeta tool in the backend
+	for (let i = 0; i < blocksToScan.length; i++) {
+		const currentItem = blocksToScan[i];
+		const currentBlock = currentItem ? currentItem.text : '';
+		if (!currentBlock) {
+			continue;
+		}
+
+		// Save the current block to a quick temporary file
+		const tmpFile = 'tmp_backup_scan_' + i + '.pem';
+		await secureWriteFile(CFG.FILE.dir_keys + tmpFile, currentBlock + '\n');
+
+		// Run keymeta to check if this key is good or bad
+		const keyInfo = await appData.keygenClass.getKeyMeta(tmpFile, luci_app_openvpn_plus);
+		await secureRemoveFile(CFG.FILE.dir_keys + tmpFile);
+
+		// Catch backend errors or empty responses immediately before parsing
+		if (keyInfo.valid === false) {
+			throw new Error(ICON.ERROR + ' ' + TXT.ERROR.key_check_failed);
+		}
+
+		// SORTING: Trust the XML tags from backup but assign verified content to variables
+		if (currentItem.type === 'ca') { caContent = currentBlock; }
+		else if (currentItem.type === 'cert') { certContent = currentBlock; }
+		else if (currentItem.type === 'key') { keyContent = currentBlock; }
+		else if (currentItem.type === 'tlscrypt-v2') { tlsCryptContent = currentBlock; }
+		else if (currentItem.type === 'dh') { dhContent = currentBlock; }
+	}
+
+	// Double check that the necessary fragments survived validation
+	if (!caContent || !certContent || !keyContent) {
+		throw new Error(ICON.ERROR + ' ' + TXT.ERROR.invalid_file_parts_missing);
+	}
+
+	// 2. Clean the configuration part (Remove the XML blocks from the text)
+	confContent = content
+		.replace(/<ca>[\s\S]*?<\/ca>\n*/g, '')
+		.replace(/<cert>[\s\S]*?<\/cert>\n*/g, '')
+		.replace(/<key>[\s\S]*?<\/key>\n*/g, '')
+		.replace(/<tls-crypt-v2>[\s\S]*?<\/tls-crypt-v2>\n*/g, '')
+		.replace(/<dh>[\s\S]*?<\/dh>\n*/g, '')
+		.trim() + '\n';
+
+	// Helper function to strip any accidental inner tags
+	const stripXmlTags = function (str) {
+		return str.replace(/<\/?(ca|cert|key|tls-crypt|dh)/g, '').trim();
+	};
+
+	// 3. Save clean files to the router folders in parallel
+	await Promise.all([
+		secureWriteFile(CFG.FILE.dir_cfg + instanceId + '.conf', confContent),
+		secureWriteFile(CFG.FILE.dir_keys + 'ca_' + instanceId + '.crt', stripXmlTags(caContent) + '\n'),
+		secureWriteFile(CFG.FILE.dir_keys + 'server_' + instanceId + '.crt', stripXmlTags(certContent) + '\n'),
+		secureWriteFile(CFG.FILE.dir_keys + 'server_' + instanceId + '.key', stripXmlTags(keyContent) + '\n'),
+		dhContent ? secureWriteFile(CFG.FILE.dir_keys + 'dh_' + instanceId + '.pem', stripXmlTags(dhContent) + '\n') : Promise.resolve(),
+		tlsCryptContent ? secureWriteFile(CFG.FILE.dir_keys + 'server_' + instanceId + '.tls2.key', stripXmlTags(tlsCryptContent) + '\n') : Promise.resolve()
+	]);
+
+	// 4. Parse connection settings from the configuration text to help the wizard
+	const portMatch = confContent.match(/^port\s+(\d+)/m);
+	const protoMatch = confContent.match(/^proto\s+(\S+)/m);
+	const matchPattern = CFG.CONF.modern_vpn_server + '[^\\(]*\\(([^)]+)\\)';
+	const cnameMatch = confContent.match(new RegExp(matchPattern));
+	const isServerBackupFile = /^server\s+/m.test(confContent) || /^server-ipv6\s+/m.test(confContent);
+
+	return {
+		isCryptoUpdateOnly: false,
+		isServerBackup: isServerBackupFile,
+		port: portMatch ? parseInt(portMatch[1], 10) : OPENVPN.PORT.s1194,
+		proto: protoMatch ? protoMatch[1].trim().toLowerCase() : OPENVPN.PROTO.udp,
+		cname: cnameMatch ? cnameMatch[1].trim() : ""
 	};
 };
 
@@ -1997,41 +2295,60 @@ const renderClientOvpnProfileQr = function (containerNode, downloadUrl) {
 /**
  * Displays the mobile layout container for OpenVPN profiles
  */
-const renderClientOvpnProfileModal = function (ipFieldWrapper, urlContainer, qrContainer, dlBtn, closeBtn) {
-	return E('div', { 'class': 'cbi-map' }, [
-		E('div', { 'class': 'cbi-section' }, [
+const renderClientOvpnProfileModal = function (ipFieldWrapper, urlContainer, qrContainer, dlBtn, closeBtn, backup) {
+	const innerSectionElements = [];
+
+	// Only add the address and description if it is NOT a backup
+	if (backup !== true) {
+		innerSectionElements.push(
 			E('div', { 'class': 'cbi-section-descr', 'style': 'margin-bottom:15px; border-bottom:1px solid var(--border-color-medium, #cbd5e1); padding-bottom:8px;' },
 				TXT.MSG.export_connection_address_qr_code
-			),
+			)
+		);
+		innerSectionElements.push(
 			E('div', { 'style': 'display:flex; flex-direction:column; align-items:center; width:100%; text-align:center; margin-bottom:15px; background: var(--background-color-medium, #f4f4f5); padding:12px; border:1px solid var(--border-color-medium, #cbd5e1); border-radius:4px;' }, [
 				E('strong', { 'style': 'display:block; font-size:12px; color:color-mix(in srgb, var(--text-color-medium, #71717a) 85%, #0055ff); text-transform:uppercase; letter-spacing:0.5px;' }, TXT.MSG.vpn_client_address),
 				ipFieldWrapper
+			])
+		);
+	}
+
+	// Always add the URL, QR-Code and warning block
+	innerSectionElements.push(
+		E('div', { 'style': 'display:flex; flex-direction:column; align-items:center; gap:15px; background: var(--background-color-medium, #f4f4f5); padding:20px; border-radius:6px; border:1px solid var(--border-color-medium, #cbd5e1); margin-bottom:15px;' }, [
+			E('div', { 'style': 'width:100%; text-align:center;' }, [
+				E('strong', { 'style': 'display:block; margin-bottom:6px; font-size:12px; color:color-mix(in srgb, var(--text-color-medium, #71717a) 85%, #0055ff); text-transform:uppercase; letter-spacing:0.5px;' }, TXT.MSG.secure_temporary_profile_url),
+				urlContainer
 			]),
-			E('div', { 'style': 'display:flex; flex-direction:column; align-items:center; gap:15px; background: var(--background-color-medium, #f4f4f5); padding:20px; border-radius:6px; border:1px solid var(--border-color-medium, #cbd5e1); margin-bottom:15px;' }, [
-				E('div', { 'style': 'width:100%; text-align:center;' }, [
-					E('strong', { 'style': 'display:block; margin-bottom:6px; font-size:12px; color:color-mix(in srgb, var(--text-color-medium, #71717a) 85%, #0055ff); text-transform:uppercase; letter-spacing:0.5px;' }, TXT.MSG.secure_temporary_profile_url),
-					urlContainer
-				]),
-				E('div', { 'style': 'width:100%; text-align:center; margin-top:5px;' }, [
-					E('strong', { 'style': 'display:block; margin-bottom:2px; font-size:12px; color:color-mix(in srgb, var(--text-color-medium, #71717a) 85%, #0055ff); text-transform:uppercase; letter-spacing:0.5px;' }, TXT.MSG.scan_qr_code_with_camera),
-					qrContainer
-				]),
-				E('div', { 'style': 'width:100%; text-align:center; margin-top:8px; font-size:12px; color:color-mix(in srgb, var(--text-color-medium, #71717a) 85%, #0055ff); padding-top:10px; border-top:1px dashed var(--border-color-medium, #cbd5e1); font-weight:500;' }, [
-					E('span', { 'style': 'var(--success-color-high, #00ac59); font-weight:bold; margin-right:4px;' }, ICON.WARNING + TXT.WARNING.security_notice + ' '),
-					TXT.MSG.download_only_available_window_open
-				])
+			E('div', { 'style': 'width:100%; text-align:center; margin-top:5px;' }, [
+				E('strong', { 'style': 'display:block; margin-bottom:2px; font-size:12px; color:color-mix(in srgb, var(--text-color-medium, #71717a) 85%, #0055ff); text-transform:uppercase; letter-spacing:0.5px;' }, TXT.MSG.scan_qr_code_with_camera),
+				qrContainer
 			]),
-			E('div', { 'style': 'text-align:right; border-top:1px solid var(--border-color-medium, #cbd5e1); padding-top:12px; margin-top:15px;' }, [
-				dlBtn, E('span', { 'style': 'margin-right:10px;' }), closeBtn
+			E('div', { 'style': 'width:100%; text-align:center; margin-top:8px; font-size:12px; color:color-mix(in srgb, var(--text-color-medium, #71717a) 85%, #0055ff); padding-top:10px; border-top:1px dashed var(--border-color-medium, #cbd5e1); font-weight:500;' }, [
+				E('span', { 'style': 'var(--success-color-high, #00ac59); font-weight:bold; margin-right:4px;' }, ICON.WARNING + TXT.WARNING.security_notice + ' '),
+				TXT.MSG.download_only_available_window_open
 			])
 		])
+	);
+
+	// Always add the button bar at the bottom
+	innerSectionElements.push(
+		E('div', { 'style': 'text-align:right; border-top:1px solid var(--border-color-medium, #cbd5e1); padding-top:12px; margin-top:15px;' }, [
+			dlBtn, E('span', { 'style': 'margin-right:10px;' }), closeBtn
+		])
+	);
+
+	// Build and return the final modal structure
+	const modalElement = E('div', { 'class': 'cbi-map' }, [
+		E('div', { 'class': 'cbi-section' }, innerSectionElements)
 	]);
+	return modalElement;
 };
 
 /**
  * Creates the basic screen elements for the mobile QR window
  */
-const createQrBoxElements = function (initialHost) {
+const createQrBoxElements = function (initialHost, backup) {
 	// Create the link field that users can click to open or download files
 	const urlOutput = E('a', {
 		'target': '_blank', 'download': '', 'onclick': 'event.stopPropagation();',
@@ -2061,7 +2378,7 @@ const createQrBoxElements = function (initialHost) {
 /**
  * Setup all click actions and update the view when things change
  */
-const setupQrBoxEvents = function (elements, ovpnParams, cryptoAssets, appData, isSiteToSite) {
+const setupQrBoxEvents = function (elements, ovpnParams, cryptoAssets, appData, isSiteToSite, backup) {
 
 	// Update data, links and the QR code asynchronously when the host changes
 	const refreshModalState = async function () {
@@ -2070,13 +2387,15 @@ const setupQrBoxEvents = function (elements, ovpnParams, cryptoAssets, appData, 
 			const instNumber = appData.statusClass.getInstanceNumber(ovpnParams.nextId);
 
 			// 1. Await the dynamic profile compilation text block
-			const fullProfileText = await compileOvpnProfileText(ovpnParams.displayId, activeHost, ovpnParams.port, ovpnParams.proto, cryptoAssets, appData, instNumber, isSiteToSite);
+			const fullProfileText = await compileOvpnProfileText(ovpnParams.displayId, activeHost, ovpnParams.port, ovpnParams.proto, cryptoAssets, appData, instNumber, isSiteToSite, backup);
 
 			// 2. Write the compiled text payload directly into the RAM configuration folder
 			await secureWriteFile(ovpnParams.exportPath, fullProfileText);
 
+			const link_id = backup ? ovpnParams.displayId + '_backup' : ovpnParams.displayId + '_client';
+
 			// 3. Trigger the backend symlink engine execution pipeline
-			const backendResponse = await luci_app_openvpn_plus([CFG.LIBEXEC.symlink, instNumber.toString(), 'create', ovpnParams.displayId]);
+			const backendResponse = await luci_app_openvpn_plus([CFG.LIBEXEC.symlink, ovpnParams.nextId, 'create', link_id]);
 
 			// 4. Parse the secret URL from the backend response
 			if (backendResponse && backendResponse.startsWith("SUCCESS: ")) {
@@ -2090,7 +2409,16 @@ const setupQrBoxEvents = function (elements, ovpnParams, cryptoAssets, appData, 
 				renderClientOvpnProfileQr(elements.nodes.qr, downloadUrl);
 			} else {
 				console.error('Backend failed to return a valid download link:', backendResponse);
+				elements.nodes.qr.innerHTML = '';
+				elements.nodes.qr.appendChild(
+					E('div', { 'style': 'color:var(--error-color-high, #f62b12); font-size:12px; font-weight:bold; padding:20px;' }, [
+						ICON.ERROR + ' ' + TXT.ERROR.failed_generate_profile_download
+					])
+				);
+				elements.nodes.url.href = '#';
+				elements.nodes.url.textContent = TXT.ERROR.profile_generation_error;
 			}
+
 
 		} catch (e) {
 			console.error('Failed to process and link profile export assets:', e);
@@ -2126,11 +2454,11 @@ const setupQrBoxEvents = function (elements, ovpnParams, cryptoAssets, appData, 
 	elements.buttons.download.addEventListener('click', function () {
 		const activeHost = elements.nodes.input.value ? sanitizeInputLine(elements.nodes.input.value) : window.location.hostname;
 		const instNumber = appData.statusClass.getInstanceNumber(ovpnParams.nextId);
-		compileOvpnProfileText(ovpnParams.displayId, activeHost, ovpnParams.port, ovpnParams.proto, cryptoAssets, appData, instNumber, isSiteToSite).then(function (fullProfileText) {
+		compileOvpnProfileText(ovpnParams.displayId, activeHost, ovpnParams.port, ovpnParams.proto, cryptoAssets, appData, instNumber, isSiteToSite, backup).then(function (fullProfileText) {
 			const blob = new Blob([fullProfileText], { type: 'application/x-openvpn-profile' });
 			const link = document.createElement('a');
 			link.href = URL.createObjectURL(blob);
-			link.download = ovpnParams.displayId.replace(/\s+/g, '_') + '_client.ovpn';
+			link.download = ovpnParams.displayId.replace(/\s+/g, '_') + (backup ? '_backup.ovpn' : '_client.ovpn');
 			document.body.appendChild(link);
 			link.click();
 			document.body.removeChild(link);
@@ -2139,13 +2467,14 @@ const setupQrBoxEvents = function (elements, ovpnParams, cryptoAssets, appData, 
 
 	// Delete temporary files and close the window when clicking the close button
 	elements.buttons.close.addEventListener('click', async function () {
-		const instNumber = appData.statusClass.getInstanceNumber(ovpnParams.nextId);
 		try {
 			// 1. Remove the temporary export file
 			await secureRemoveFile(ovpnParams.exportPath);
 
+			const link_id = backup ? ovpnParams.displayId + '_backup' : ovpnParams.displayId + '_client';
+
 			// 2. Call the universal script to delete the symlink with wildcard cleanup
-			await luci_app_openvpn_plus([CFG.LIBEXEC.symlink, instNumber.toString(), 'delete', ovpnParams.displayId]);
+			await luci_app_openvpn_plus([CFG.LIBEXEC.symlink, ovpnParams.nextId, 'delete', link_id]);
 		} catch (err) {
 			// Log the error but do not block the UI from closing
 			console.error("Error during cleanup:", err);
@@ -2176,7 +2505,14 @@ const SERVER_FILES_TEMPLATE = {
 /**
  * Opens a simplified modal for mobile apps clients with a dynamic targetCnName input field and triggers asynchronous client cryptographic generation.
  */
-const openMobileExportModal = function (instance_id, nextId, files, finalHost, triggerStandardExportFlow, appData) {
+const openMobileExportModal = function (instance_id, nextId, serverAssets, finalHost, triggerStandardExportFlow, appData, displayId) {
+
+	// Create a dropdown to select between creating a client or backing up the server
+	const selectDropdown = E('select', { 'class': 'cbi-input-select', 'style': 'width:100%; font-weight:bold; margin-top:10px; margin-bottom:5px;' });
+	selectDropdown.appendChild(E('option', { 'value': 'create_new_client' }, [ICON.PLUS + ' ' + TXT.KEY.create_key_new_mobile]));
+	selectDropdown.appendChild(E('option', { 'disabled': true }, ['- - -']));
+	selectDropdown.appendChild(E('option', { 'value': 'backup_server_profile' }, [ICON.BACKUP + TXT.MSG.backup_server_profile + ': ' + displayId]));
+
 	const cnInput = E('input', {
 		'type': 'text',
 		'class': 'cbi-input-text',
@@ -2186,6 +2522,20 @@ const openMobileExportModal = function (instance_id, nextId, files, finalHost, t
 	cnInput.addEventListener('input', function () {
 		cnInput.classList.remove('cbi-input-invalid');
 	});
+
+	// Hide or show both the label and the text input field based on selection
+	selectDropdown.addEventListener('change', function () {
+		const descNode = document.getElementById('mobile-description-node');
+		if (selectDropdown.value === 'backup_server_profile') {
+			cnInput.style.display = 'none';
+			cnInput.classList.remove('cbi-input-invalid');
+			if (descNode) { descNode.style.display = 'none'; }
+		} else {
+			cnInput.style.display = 'block';
+			if (descNode) { descNode.style.display = 'block'; }
+		}
+	});
+
 	const modalConfirmBtn = E('button', { 'class': 'cbi-button cbi-button-action important' }, [TXT.BTN.next + ' ' + ICON.ARROW]);
 	const modalCancelBtn = E('button', { 'class': 'cbi-button cbi-button-neutral', 'style': 'margin-right:10px;' }, [TXT.BTN.cancel]);
 	const statusFeedbackNode = E('textarea', {
@@ -2200,6 +2550,11 @@ const openMobileExportModal = function (instance_id, nextId, files, finalHost, t
 	L.ui.showModal(ICON.MOBILE + ' ' + TXT.MSG.export_openvpn_connect_client_profile, [
 		E('div', { 'class': 'cbi-map' }, [
 			E('div', { 'class': 'cbi-section' }, [
+				E('div', { 'class': 'cbi-value', 'style': 'border:none; padding:0; margin-bottom:12px;' }, [
+					E('div', { 'class': 'cbi-value-field', 'style': 'width:100%; margin:0; padding:0;' }, [
+						selectDropdown
+					])
+				]),
 				E('div', { 'id': 'mobile-description-node', 'class': 'cbi-section-descr', 'style': 'margin-bottom:12px; font-size:12px; color:color-mix(in srgb, var(--text-color-medium, #71717a) 85%, #0055ff);' }, [
 					TXT.MSG.please_assign_cn_name
 				]),
@@ -2219,9 +2574,18 @@ const openMobileExportModal = function (instance_id, nextId, files, finalHost, t
 
 	modalConfirmBtn.addEventListener('click', function (ev) {
 		ev.preventDefault();
+
+		// Check if the user selected the backup option
+		if (selectDropdown.value === 'backup_server_profile') {
+			L.ui.hideModal();
+			// Trigger the standard export function to build and download the .ovpn file
+			triggerStandardExportFlow(serverAssets, displayId, saveApplyOpenVPN, true);
+			return;
+		}
+
 		if (forgedAssetsBundle && finalizedCnName) {
 			L.ui.hideModal();
-			triggerStandardExportFlow(forgedAssetsBundle, finalizedCnName, saveApplyOpenVPN);
+			triggerStandardExportFlow(forgedAssetsBundle, finalizedCnName, saveApplyOpenVPN, false);
 			return;
 		}
 		cnInput.classList.remove('cbi-input-invalid');
@@ -2234,6 +2598,8 @@ const openMobileExportModal = function (instance_id, nextId, files, finalHost, t
 		finalizedCnName = cleanCn;
 		const descNode = document.getElementById('mobile-description-node');
 		if (descNode) { descNode.style.display = 'none'; }
+
+		selectDropdown.style.display = 'none';
 		cnInput.style.display = 'none';
 		modalConfirmBtn.disabled = true;
 		modalConfirmBtn.textContent = ICON.LOADING + ' ' + TXT.BTN.processing;
@@ -2249,7 +2615,7 @@ const openMobileExportModal = function (instance_id, nextId, files, finalHost, t
 				statusFeedbackNode.value += '\n' + ICON.ERROR + ' ' + TXT.ERROR.keygen_failed;
 				return;
 			}
-			statusFeedbackNode.value += '\nLOG: Certificate pipeline completed. Generating TLS crypt v2 client key...';
+			statusFeedbackNode.value += '\n' + TXT.KEY.log_crt_completed_tls_client_keygen;
 
 			// Step 2: Directly chain the asymmetric client tls generation
 			appData.keygenClass.executeAsynchronousKeyGen(nextId, appData.keygenClass.KEYTYPE.client_tls2, 'none', '0', finalizedCnName, '', statusFeedbackNode, secureFileCallbacks, function (tlsSuccess, nullData, tlsPayload) {
@@ -2257,13 +2623,13 @@ const openMobileExportModal = function (instance_id, nextId, files, finalHost, t
 					modalCancelBtn.style.display = 'inline-block';
 					modalConfirmBtn.disabled = false;
 					modalConfirmBtn.textContent = TXT.BTN.next + ' ' + ICON.ARROW;
-					statusFeedbackNode.value += '\n' + ICON.ERROR + ' TLS crypt v2 client key generation failed.';
+					statusFeedbackNode.value += '\n' + ICON.ERROR + TXT.ERROR.tls_client_keygen_failed;
 					return;
 				}
 
 				// Pack all 5 crypto components cleanly into the finalized delivery bundle
 				forgedAssetsBundle = Object.assign({}, SERVER_FILES_TEMPLATE, {
-					conf: files.conf,
+					conf: serverAssets.conf,
 					ca: pkiPayload.ca,
 					cert: pkiPayload.cert,
 					key: pkiPayload.key,
@@ -2449,20 +2815,22 @@ const siteToSiteExportUpdateClients = async function (instance_id, nextId, targe
 	await secureWriteFile(CFG.FILE.dir_cfg + instance_id + '.conf', formatOpenVpnConfig(configOutput));
 };
 
-
 /**
  * Opens the selection modal for site-to-site clients and handles configuration updates
  */
-const openSiteToSiteExportModal = function (instance_id, nextId, files, activeBranchNames, initialHost, triggerStandardExportFlow, appData) {
+const openSiteToSiteExportModal = function (instance_id, nextId, serverAssets, activeBranchNames, initialHost, triggerStandardExportFlow, appData, displayId) {
 
 	const selectDropdown = E('select', { 'class': 'cbi-input-select', 'style': 'width:100%; font-weight:bold;' });
 	activeBranchNames.forEach(function (name) {
-		selectDropdown.appendChild(E('option', { 'value': name }, [ICON.OFFICE + TXT.MSG.office_profile + ' ' + name]));
+		selectDropdown.appendChild(E('option', { 'value': name }, [ICON.OFFICE + TXT.MSG.remote_profile + ': ' + name]));
 	});
 	selectDropdown.appendChild(E('option', { 'value': 'create_new_client' }, [ICON.PLUS + TXT.KEY.create_key_new_office]));
-	selectDropdown.appendChild(E('option', { 'value': 'delete_existing_clients' }, [ICON.MINUS + _('Delete Client Profile...')]));
+	selectDropdown.appendChild(E('option', { 'value': 'delete_existing_clients' }, [ICON.MINUS + TXT.MSG.delete_remote_profile]));
 
-	const subnetInputs = appData.wizardClass.renderSubnetInputs();
+	selectDropdown.appendChild(E('option', { 'disabled': true }, ['- - -']));
+	selectDropdown.appendChild(E('option', { 'value': 'backup_server_profile' }, [ICON.BACKUP + TXT.MSG.backup_server_profile + ': ' + displayId]));
+
+	const subnetInputs = appData.wizardClass.renderSubnetInputs(networkCallbacks.checkIp);
 
 	// Creates a hidden yellowish warning message box for network conflicts or duplicate names
 	const errorDisplayNode = E('div', {
@@ -2470,8 +2838,8 @@ const openSiteToSiteExportModal = function (instance_id, nextId, files, activeBr
 	});
 
 	// Create Add and Delete buttons
-	const addOfficeBtn = E('button', { 'class': 'cbi-button cbi-button-add', 'style': 'margin-top:8px; font-weight:bold;' }, [ICON.PLUS + _('Add')]);
-	const delOfficeBtn = E('button', { 'class': 'cbi-button cbi-button-remove disabled', 'style': 'margin-top:8px; font-weight:bold; text-align: right; display: none;', 'disabled': true }, [ICON.REMOVE + _('Delete')]);
+	const addOfficeBtn = E('button', { 'class': 'cbi-button cbi-button-add', 'style': 'margin-top:8px; font-weight:bold;' }, [ICON.PLUS + TXT.INFO.add]);
+	const delOfficeBtn = E('button', { 'class': 'cbi-button cbi-button-remove disabled', 'style': 'margin-top:8px; font-weight:bold; text-align: right; display: none;', 'disabled': true }, [ICON.REMOVE + TXT.INFO.delete]);
 
 	// Creates a small preview table to show the validated network data
 	const networkPreviewTable = E('table', {
@@ -2496,7 +2864,6 @@ const openSiteToSiteExportModal = function (instance_id, nextId, files, activeBr
 		delOfficeBtn
 	]);
 
-
 	// Combine input fields, buttons and error box into one container
 	const inputRowContainer = E('div', { 'style': 'margin-top:4px; display:none;' }, [
 		subnetInputs.node,
@@ -2508,7 +2875,7 @@ const openSiteToSiteExportModal = function (instance_id, nextId, files, activeBr
 	const deleteChecklistContainer = E('div', {
 		'style': 'margin-top:12px; padding:15px; background:var(--background-color-medium, #f4f4f5); border:1px dashed var(--border-color-medium, #f4f4f5); border-radius:4px; width:100%; display: none;'
 	}, [
-		E('strong', { 'style': 'display:block; margin-bottom:10px; font-size:12px; color:var(--error-color-high, #f62b12); text-transform:uppercase; font-family:var(--font-sans);' }, [_('Select clients to remove:')])
+		E('strong', { 'style': 'display:block; margin-bottom:10px; font-size:12px; color:var(--error-color-high, #f62b12); text-transform:uppercase; font-family:var(--font-sans);' }, [TXT.MSG.select_clients_to_remove])
 	]);
 
 	// Generate dynamic matrix layout checklist row objects inside the memory tree
@@ -2666,7 +3033,7 @@ const openSiteToSiteExportModal = function (instance_id, nextId, files, activeBr
 			// Unlock the main Next button
 			modalConfirmBtn.disabled = false;
 		}).catch(function () {
-			errorDisplayNode.innerHTML = ICON.WARNING + ' ' + _('Error: Network status check failed.');
+			errorDisplayNode.innerHTML = ICON.WARNING + ' ' + TXT.ERROR.network_status_check_failed;
 			errorDisplayNode.style.display = 'block';
 		});
 	});
@@ -2732,11 +3099,20 @@ const openSiteToSiteExportModal = function (instance_id, nextId, files, activeBr
 		ev.preventDefault();
 		if (forgedAssetsBundle && finalizedCnName) {
 			L.ui.hideModal();
-			triggerStandardExportFlow(forgedAssetsBundle, finalizedCnName, saveApplyOpenVPN);
+			triggerStandardExportFlow(forgedAssetsBundle, finalizedCnName, saveApplyOpenVPN, false);
 			return;
 		}
 
 		const targetMode = selectDropdown.value;
+
+		// Check if the user selected the backup option
+		if (targetMode === 'backup_server_profile') {
+			L.ui.hideModal();
+			// Trigger the standard export function to build and download the .ovpn file
+			triggerStandardExportFlow(serverAssets, displayId, saveApplyOpenVPN, true);
+			return;
+		}
+
 		let targetCnName = '';
 		let targetSub = '';
 		let targetMask = '';
@@ -2798,7 +3174,7 @@ const openSiteToSiteExportModal = function (instance_id, nextId, files, activeBr
 				statusFeedbackNode.value += '\n' + ICON.ERROR + ' ' + TXT.ERROR.keygen_failed;
 				return;
 			}
-			statusFeedbackNode.value += '\nLOG: Certificate pipeline completed. Generating TLS crypt v2 client key...';
+			statusFeedbackNode.value += '\n' + TXT.KEY.log_crt_completed_tls_client_keygen;
 
 			// Step 2: Directly chain the asymmetric client tls generation
 			appData.keygenClass.executeAsynchronousKeyGen(nextId, appData.keygenClass.KEYTYPE.client_tls2, 'none', '0', targetCnName, '', statusFeedbackNode, secureFileCallbacks, async function (tlsSuccess, nullData, tlsPayload) {
@@ -2806,10 +3182,10 @@ const openSiteToSiteExportModal = function (instance_id, nextId, files, activeBr
 					modalCancelBtn.style.display = 'inline-block';
 					modalConfirmBtn.disabled = false;
 					modalConfirmBtn.textContent = TXT.BTN.next + ' ' + ICON.ARROW;
-					statusFeedbackNode.value += '\n' + ICON.ERROR + ' TLS crypt v2 client key generation failed.';
+					statusFeedbackNode.value += '\n' + ICON.ERROR + TXT.ERROR.tls_client_keygen_failed;
 					return;
 				}
-				const activeConfigContentText = files;
+				const activeConfigContentText = serverAssets;
 				if (isNewClient === true) {
 					await siteToSiteExportUpdateClients(instance_id, nextId, targetCnName, targetSub, targetMask);
 					saveApplyOpenVPN = true;
@@ -2832,10 +3208,10 @@ const openSiteToSiteExportModal = function (instance_id, nextId, files, activeBr
 /**
  * Exporter for OpenVPN profiles with embedded client crypto data
  */
-const downloadClientOvpnProfile = async function (instance_id, instObj, customUciName, appData) {
+const downloadClientOvpnProfile = async function (instance_id, instObj, customUciName, appData, directBackup) {
 	const nextId = instance_id;
 	const displayId = customUciName || instance_id;
-	const currentRole = instObj.role || 'client';
+	const currentRole = instObj.role || OPENVPN.ROLE.SERVER;
 	const rolePrefix = currentRole + '_';
 
 	// Note: Profile will be compiled in: triggerStandardExportFlow -> setupQrBoxEvents -> compileOvpnProfileText
@@ -2874,12 +3250,11 @@ const downloadClientOvpnProfile = async function (instance_id, instObj, customUc
 			tlsCrypt: rawFilesArray[4]
 		});;
 
-
 		// Check if this server configuration is Site-To-Site
 		const isSiteToSite = appData.statusClass.parseSiteToSite(serverAssets.conf);
 
 		// Read connection parameters instantly from your clean instObj RAM cache!
-		const serverProto = instObj.proto || OPENVPN.PROTO.UDP;
+		const serverProto = instObj.proto || OPENVPN.PROTO.udp;
 		const internalPort = instObj.port || OPENVPN.PORT.s1194;
 
 		// Read the custom client port range directly from the template schema
@@ -2918,10 +3293,13 @@ const downloadClientOvpnProfile = async function (instance_id, instObj, customUc
 		};
 
 		// --- TYPE A: Flow for standard devices (Mobile Apps) ---
-		const triggerStandardExportFlow = function (finalCryptoBundle, overrideCn, saveApplyOpenVPN) {
+		const triggerStandardExportFlow = function (finalCryptoBundle, overrideCn, saveApplyOpenVPN, backup) {
 			const ovpnParamsUpdated = Object.assign({}, ovpnDownloadParams);
 			let title;
-			if (overrideCn) {
+			if (backup) {
+				title = ICON.BACKUP + TXT.MSG.backup_export;
+			}
+			else if (overrideCn) {
 				title = ICON.OFFICE + TXT.MSG.client_export;
 				ovpnParamsUpdated.displayId = overrideCn;
 			} else {
@@ -2931,15 +3309,21 @@ const downloadClientOvpnProfile = async function (instance_id, instObj, customUc
 				ovpnParamsUpdated.saveApplyOpenVPN = saveApplyOpenVPN;
 			}
 			const ui = createQrBoxElements(finalHost);
-			setupQrBoxEvents(ui, ovpnParamsUpdated, finalCryptoBundle, appData, isSiteToSite);
+			setupQrBoxEvents(ui, ovpnParamsUpdated, finalCryptoBundle, appData, isSiteToSite, backup);
 			L.ui.showModal(title + ': ' + ovpnParamsUpdated.displayId, [
-				renderClientOvpnProfileModal(ui.nodes.wrapper, ui.nodes.url, ui.nodes.qr, ui.buttons.download, ui.buttons.close)
+				renderClientOvpnProfileModal(ui.nodes.wrapper, ui.nodes.url, ui.nodes.qr, ui.buttons.download, ui.buttons.close, backup)
 			]);
 		};
 
+		// On direct backup show the export modal with qr-code and download immediatly
+		if (directBackup) {
+			triggerStandardExportFlow(serverAssets, displayId, false, true);
+			return;
+		}
+
 		// If it is a standard mobile server, open the Mobile Export modal to generate unique client_pki keys first
 		if (!isSiteToSite) {
-			openMobileExportModal(instance_id, nextId, serverAssets, finalHost, triggerStandardExportFlow, appData);
+			openMobileExportModal(instance_id, nextId, serverAssets, finalHost, triggerStandardExportFlow, appData, displayId);
 			return;
 		}
 
@@ -2959,7 +3343,7 @@ const downloadClientOvpnProfile = async function (instance_id, instObj, customUc
 		}
 
 		// --- TYPE B: Open the clean isolated Site-to-Site Selection Modal UI Sub-Routine ---
-		openSiteToSiteExportModal(instance_id, nextId, serverAssets, activeBranchNames, finalHost, triggerStandardExportFlow, appData);
+		openSiteToSiteExportModal(instance_id, nextId, serverAssets, activeBranchNames, finalHost, triggerStandardExportFlow, appData, displayId);
 
 	} catch (err) {
 		// Central error interception handler cleanly logs all file system crashes
@@ -3409,7 +3793,7 @@ const renderKeyButtons = function (label, filename, instance_id, displayId, defa
 					statusMsg.className = 'text-danger';
 					statusMsg.textContent = ICON.ERROR + ' ' + TXT.MSG.uploaded_file_invalid;
 					uploadBtn.classList.remove('disabled');
-					throw new Error(TXT.KEY.key_verification_failed);
+					throw new Error(TXT.ERROR.key_verification_failed);
 				}
 
 				let typeMismatch = false;
@@ -3479,7 +3863,7 @@ const renderKeyButtons = function (label, filename, instance_id, displayId, defa
 				uciSaveApplyRestart(instance_id);
 
 			} catch (err) {
-				if (err.message !== TXT.KEY.key_verification_failed && err.message !== TXT.ERROR.key_type_mismatch) {
+				if (err.message !== TXT.ERROR.key_verification_failed && err.message !== TXT.ERROR.key_type_mismatch) {
 					statusMsg.className = 'text-danger';
 					statusMsg.textContent = ICON.ERROR + ' ' + TXT.INFO.error + ': ' + err.message;
 				}
@@ -3543,21 +3927,6 @@ const renderKeyButtons = function (label, filename, instance_id, displayId, defa
 };
 
 /**
- * Update port and proto in the flood guard rules file 'instance*.nft'
- */
-const updatefloodGuardFile = async function (instance_id, port, proto) {
-	const nftFilePath = CFG.FILE.dir_cfg + instance_id + '.nft';
-	const nftFileRaw = await secureReadFile(nftFilePath);
-	let nftFile = String(nftFileRaw || '').trim();
-	if (nftFile.length > 0) {
-		nftFile = nftFile.replace(new RegExp(CFG.ID.instance + '0', 'g'), instance_id);
-		nftFile = nftFile.replace(new RegExp(CFG.ID.fwPort + '\\s*=\\s*\\d+', 'g'), CFG.ID.fwPort + '=' + port);
-		nftFile = nftFile.replace(new RegExp(CFG.ID.fwProto + '\\s*=\\s*"[^"]*"', 'g'), CFG.ID.fwProto + '="' + proto + '"');
-	}
-	await secureWriteFile(nftFilePath, nftFile);
-}
-
-/**
  * Saves the modified configuration text and handles the instance restart logic
  */
 const handleInstanceSave = async function (instance_id, instObj, role, txtArea, saveBtn, sNotice, originalConfContent, modificationBoxNode, appData, clientUpdateOnly) {
@@ -3589,9 +3958,9 @@ const handleInstanceSave = async function (instance_id, instObj, role, txtArea, 
 		currentPort = appData.statusClass.calcPortFromId(instance_id);
 	}
 	const newPort = appData.statusClass.parsePortFromConfig(role, newConfigContent);
-	let newProto = appData.statusClass.parseProtoFromConfig(newConfigContent);
 
-	const detectedProto = appData.statusClass.parseProtoFromConfig(newConfigContent);
+	const currentProto = appData.statusClass.parseProtoFromConfig(originalConfContent);
+	const newProto = appData.statusClass.parseProtoFromConfig(newConfigContent);
 
 	if (role === OPENVPN.ROLE.SERVER) {
 
@@ -3621,15 +3990,15 @@ const handleInstanceSave = async function (instance_id, instObj, role, txtArea, 
 				if (instance && instance.id === instance_id) {
 					instance.confContent = newConfigContent;
 					instance.port = newPort || currentPort;
+					instance.proto = newProto || currentProto;
+					instance.serverSiteToSite = serverSiteToSite;
+					instance.floodGuard = floodGuardEnabled;
 					break;
 				}
 			}
 		}
 
-		if (role === OPENVPN.ROLE.SERVER) {
-			await updatefloodGuardFile(instance_id, newPort, newProto);
-		}
-		await syncInstanceFirewallRule(instance_id, instObj, role, newPort, detectedProto, serverSiteToSite, floodGuardEnabled, appData, newConfigContent);
+		await syncInstanceFirewallRule(instance_id, instObj, role, newPort, newProto, serverSiteToSite, floodGuardEnabled, appData, newConfigContent);
 
 		// Trigger changes system banner and restart workflow if needed
 		if (isCurrentlyEnabled) {
@@ -3698,7 +4067,7 @@ const handleInstanceDeletion = function (instance_id, displayId, delBtn, dNotice
 /**
  * Shows the collapsible box containing all cryptographic key files, keeping control buttons always visible.
  */
-const renderKeysBox = function (instance_id, displayId, role, ovpnProfileBtn, keygenBtn, appData) {
+const renderKeysBox = function (instance_id, displayId, role, ovpnProfileBtn, keygenBackupBtn, appData) {
 	const isServer = (role === OPENVPN.ROLE.SERVER);
 	const certLabel = isServer ? TXT.KEY.server_crt : TXT.KEY.client_crt;
 	const keyLabel = isServer ? TXT.KEY.server_key : TXT.KEY.client_key;
@@ -3747,13 +4116,15 @@ const renderKeysBox = function (instance_id, displayId, role, ovpnProfileBtn, ke
 
 			if (isHidden) {
 				keysContentContainer.style.display = 'block';
-				keygenBtn.style.display = 'block';
-				inlineSummaryLine.style.display = 'none'; // Hide text row when box expands
+				keygenBackupBtn.style.display = 'block';
+				// Hide text row when box expands
+				inlineSummaryLine.style.display = 'none';
 				toggleArrow.textContent = '▼ ';
 			} else {
 				keysContentContainer.style.display = 'none';
-				keygenBtn.style.display = 'none';
-				inlineSummaryLine.style.display = 'block'; // Show text row when box collapses
+				keygenBackupBtn.style.display = 'none';
+				// Show text row when box collapses
+				inlineSummaryLine.style.display = 'block';
 				toggleArrow.textContent = '▶ ';
 			}
 		}
@@ -3776,7 +4147,7 @@ const renderKeysBox = function (instance_id, displayId, role, ovpnProfileBtn, ke
 			// The action buttons container remains outside the collapsible block (always visible)
 			E('div', { 'style': 'width:100%; display:block; overflow:hidden; border-top:1px dashed var(--border-color-medium, #cbd5e1); padding-top:5px; margin-top:0px;' }, [
 				ovpnProfileBtn,
-				((role === OPENVPN.ROLE.SERVER) ? keygenBtn : '')
+				keygenBackupBtn
 			])
 		])
 	]);
@@ -3946,7 +4317,7 @@ const renderPortAlertBox = function (instObj, role, appData) {
 		runBackgroundPortCheckExtern.callback = showAlertBoxCallback;
 		initialRefreshQueue.push(runBackgroundPortCheckExtern);
 		await portForwardingAlert.check(
-			instObj.proto || OPENVPN.PROTO.UDP,
+			instObj.proto || OPENVPN.PROTO.udp,
 			role,
 			instObj.port || OPENVPN.PORT.s1194,
 			instObj.portExtern || OPENVPN.PORT.s1194,
@@ -4029,15 +4400,23 @@ const renderInstanceBox = function (s, idx, appData) {
 		'style': 'display: inline-flex; align-items: center; cursor: pointer; font-size: 13px; font-weight: bold;'
 	}, [instanceCheckbox, E('span', {}, TXT.BTN.enabled)]);
 
-	// Create the key generator button
-	const keygenBtn = E('button', {
+	const keygenLabel = (role === OPENVPN.ROLE.SERVER) ? TXT.BTN.keygen : TXT.BTN.backup
+
+	// Create the keygen/backup button
+	const keygenBackupBtn = E('button', {
 		'class': 'cbi-button cbi-button-apply important',
 		'style': 'float: right; margin: 10px 10px 0 0; display: none'
-	}, TXT.KEY.keygen);
+	}, keygenLabel);
 
-	keygenBtn.addEventListener('click', function (ev) {
+
+	keygenBackupBtn.addEventListener('click', function (ev) {
 		ev.preventDefault();
-		appData.keygenClass.openKeyGenModal(instance_id, instObj.displayName, role, appData, uciSaveApplyRestart, secureFileCallbacks);
+		// keygen on server profiles and backup on client profiles
+		if (role === OPENVPN.ROLE.SERVER) {
+			appData.keygenClass.openKeyGenModal(instance_id, instObj.displayName, role, appData, uciSaveApplyRestart, secureFileCallbacks);
+		} else {
+			downloadClientOvpnProfile(instance_id, instObj, instObj.displayName, appData, true);
+		}
 	});
 
 	// Create the main configuration text box field
@@ -4061,7 +4440,7 @@ const renderInstanceBox = function (s, idx, appData) {
 		}, TXT.MSG.export_ovpn);
 		ovpnProfileBtn.addEventListener('click', function (ev) {
 			ev.preventDefault();
-			downloadClientOvpnProfile(instance_id, instObj, customDisplayName, appData);
+			downloadClientOvpnProfile(instance_id, instObj, customDisplayName, appData, false);
 		});
 	} else {
 		ovpnProfileBtn = E('button', {
@@ -4077,7 +4456,8 @@ const renderInstanceBox = function (s, idx, appData) {
 				uciSaveApplyRestartCallback: uciSaveApplyRestart,
 				importOvpnClientProfileCallback: importOvpnClientProfile,
 				instanceNumber: instNum,
-				forcedScenario: OPENVPN.SCENARIO.SITE_TO_SITE_CLIENT
+				forcedScenario: OPENVPN.SCENARIO.SITE_TO_SITE_CLIENT,
+				forcedScenarioTitle: ICON.IMPORT + TXT.MSG.import_openvpn_client_profile
 			});
 			appData.wizardClass.openWizardModal(wizardData);
 		});
@@ -4101,7 +4481,7 @@ const renderInstanceBox = function (s, idx, appData) {
 
 			renderPortAlertBox(instObj, role, appData),
 
-			renderKeysBox(instance_id, displayId, role, ovpnProfileBtn, keygenBtn, appData),
+			renderKeysBox(instance_id, displayId, role, ovpnProfileBtn, keygenBackupBtn, appData),
 
 			renderConfigEditor(instance_id, txtArea, saveBtn),
 
@@ -4125,6 +4505,24 @@ const renderInstanceBox = function (s, idx, appData) {
 
 	return sectionRootNode;
 };
+
+/**
+ * Open Import Backup Instance Wizard
+ */
+const importBackupInstance = function (appData) {
+	const newInstNumber = getNextInstanceNumber(appData);
+	const wizardData = Object.assign({}, appData.wizardClass.WIZARD_DATA_TEMPLATE, {
+		appData: appData,
+		addNewInstanceCallback: addNewInstance,
+		networkCallbacks: networkCallbacks,
+		uciSaveApplyRestartCallback: uciSaveApplyRestart,
+		importOvpnClientProfileCallback: importOvpnBackupProfile,
+		instanceNumber: newInstNumber,
+		forcedScenario: OPENVPN.SCENARIO.SITE_TO_SITE_CLIENT,
+		forcedScenarioTitle: ICON.BACKUP + TXT.MSG.backup_import
+	});
+	appData.wizardClass.openWizardModal(wizardData, false);
+}
 
 /**
  * Subroutine of addNewInstance to create a new OpenVPN instance and its firewall rules safely.
@@ -4170,8 +4568,6 @@ const createInstance = async function (newInstanceItem, appData, wizardParams) {
 
 		// check if 'setenv floodguard on'
 		floodGuardEnabled = appData.statusClass.parseFloodGuard(newInstanceItem.confContent);
-		await updatefloodGuardFile(newInstanceItem.id, newInstanceItem.port, newInstanceItem.proto);
-
 	}
 
 	// create firewall rules of new isntance
@@ -4200,16 +4596,28 @@ const addNewInstance = async function (roleType, appData, wizardParams, optional
 		connectedClients: []
 	});
 
-	// Trigger the automated key allocation modal for ALL server installations
-	if ((newInstanceItem.role === OPENVPN.ROLE.SERVER) || ((wizardParams) && (wizardParams.role === OPENVPN.ROLE.SERVER))) {
+	let openKeygenModal = false;
+	if (newInstanceItem.role === OPENVPN.ROLE.SERVER) {
+		openKeygenModal = true;
+	}
 
+	if ((wizardParams) && (wizardParams.role === OPENVPN.ROLE.SERVER)) {
+		if (wizardParams.isServerBackup === true) {
+			openKeygenModal = false;
+		} else {
+			openKeygenModal = true;
+		}
+	}
+
+	// Trigger the automated key allocation modal for ALL server installations
+	if (openKeygenModal) {
 		const callbacks = ({
 			openWizardBtnClick: openWizardBtnClick,
 			secureFileCallbacks: secureFileCallbacks,
 			uciSaveApplyRestart: uciSaveApplyRestart,
 			createInstance: createInstance,
+			importBackupInstance: importBackupInstance,
 		});
-
 		appData.keygenClass.openAutomatedPostKeyGenModal(newInstanceItem, appData, wizardParams, callbacks, optionalShowBtnCancel);
 
 	} else {
@@ -4265,7 +4673,8 @@ const openManualClientImportModal = function (appData) {
 			uciSaveApplyRestartCallback: uciSaveApplyRestart,
 			importOvpnClientProfileCallback: importOvpnClientProfile,
 			instanceNumber: nextNum,
-			forcedScenario: OPENVPN.SCENARIO.SITE_TO_SITE_CLIENT
+			forcedScenario: OPENVPN.SCENARIO.SITE_TO_SITE_CLIENT,
+			forcedScenarioTitle: ICON.IMPORT + TXT.MSG.import_openvpn_client_profile
 		});
 		appData.wizardClass.openWizardModal(wizardData, false);
 	});
@@ -4275,7 +4684,7 @@ const openManualClientImportModal = function (appData) {
 	cancelBtn.addEventListener('click', handlePureCancel);
 
 	// Render the complete client import window layout
-	L.ui.showModal(ICON.IMPORT + TXT.MSG.import_openvpn_connect_client_profile, [
+	L.ui.showModal(ICON.IMPORT + TXT.MSG.import_openvpn_client_profile, [
 		E('div', { 'class': 'cbi-map' }, [
 			E('div', { 'class': 'cbi-section' }, [
 				infoText,
@@ -4346,6 +4755,122 @@ const reloadFirewall = {
 };
 
 /**
+ * Update port, proto and clean unused rules block from 'instance*.nft'
+ */
+const generate_nft_file = async function (proto, port, instance_id, nftScriptPath) {
+	const nftDefaultPath = CFG.FILE.dir_cfg + CFG.FILE.default_nft;
+	const nftDefaultRaw = await secureReadFile(nftDefaultPath);
+	let nftNew = nftDefaultRaw ? String(nftDefaultRaw) : '';
+
+	// If the template file is empty or does not exist, it is not valid
+	if (nftNew.length === 0) {
+		return { changed: false, valid: false };
+	}
+
+	// 1. Create the new file content from the template (remove TCP or UDP block)
+	if (proto === OPENVPN.PROTO.tcp) {
+		nftNew = nftNew.replace(/# === START OF UDP BLOCK ===[\s\S]*?# === END OF UDP BLOCK ===/g, '');
+	} else if (proto === OPENVPN.PROTO.udp) {
+		nftNew = nftNew.replace(/# === START OF TCP BLOCK ===[\s\S]*?# === END OF TCP BLOCK ===/g, '');
+	}
+
+	// Change the instance ID (e.g: change instance0 to instance1)
+	nftNew = nftNew.replace(new RegExp(CFG.ID.instance + '0', 'g'), instance_id);
+
+	// Change '$ovpn_port' to the real port number (e.g: 444)
+	nftNew = nftNew.replace(/\$ovpn_port/g, port);
+
+	// 2. Read the existing file
+	const nftFilePath = CFG.FILE.dir_cfg + instance_id + '.nft';
+	const nftFileRaw = await secureReadFile(nftFilePath);
+	const nftFile = String(nftFileRaw) || '';
+
+	// 3. Only save the file if the new content is different from the old content
+	if (nftFile !== nftNew) {
+		await secureWriteFile(nftFilePath, nftNew);
+		return { changed: true, valid: true };
+	}
+
+	// If the file is already correct and no changes are needed
+	return { changed: false, valid: true };
+}
+
+
+/**
+ * Generate Flood Guard jump rule file for input chain
+ */
+const generate_jmp_nft_file = async function (proto, port, instance_id, jmpScriptPath) {
+	let jmpNftContent = '#!/usr/sbin/nft -f\n';
+	jmpNftContent += '# Automatically generated by luci-app-openvpn-plus - OpenVPN Flood Guard firewall input rule\n';
+
+	if (proto === OPENVPN.PROTO.tcp) {
+		jmpNftContent += 'tcp dport ' + String(port) + ' jump ' + CFG.ID.fw_openvpn_floodguard + instance_id + ' comment "luci-app-openvpn-plus: flood guard filter rules for ' + instance_id + '";\n;\n';
+	} else {
+		jmpNftContent += 'udp dport ' + String(port) + ' jump ' + CFG.ID.fw_openvpn_floodguard + instance_id + ' comment "luci-app-openvpn-plus: flood guard filter rules for ' + instance_id + '";\n;\n';
+	}
+
+	// Try to read the old file content to see if the script actually changed
+	let oldScriptContent = '';
+	try {
+		oldScriptContent = await secureReadFile(jmpScriptPath);
+	} catch {
+		oldScriptContent = '';
+	}
+
+	// Only write the file to the flash storage if the content is different
+	if (String(oldScriptContent).trim() !== jmpNftContent.trim()) {
+		await secureWriteFile(jmpScriptPath, jmpNftContent);
+		// if changed return true
+		return true;
+	} else {
+		return false;
+	}
+}
+
+/**
+ * Generate static rules file for Site-To-Site outbound and inbound forward
+ */
+const generate_s2s_nft_file = async function (deviceName, localSubnet, remoteSubnets, instance_id, s2sScriptPath) {
+
+	let lanDevice = 'br-lan';
+	const res = await luci_app_openvpn_plus([CFG.LIBEXEC.getl3dev]);
+	if (res && res != '' && !res.includes("ERROR:")) {
+		lanDevice = res;
+	}
+
+	let s2sNftContent = '#!/usr/sbin/nft -f\n';
+	s2sNftContent += '# Automatically generated by luci-app-openvpn-plus - OpenVPN Site-to-Site Firewall Rules\n';
+
+	s2sNftContent += 'iifname "' + deviceName + '" ip daddr ' + localSubnet + ' accept comment "luci-app-openvpn-plus: static Site-To-Site outbound forward for ' + instance_id + '";\n';
+
+	for (let i = 0; i < remoteSubnets.length; i++) {
+		const remoteSubnet = remoteSubnets[i];
+		if (!remoteSubnet) {
+			continue;
+		}
+		s2sNftContent += 'iifname "' + lanDevice + '" ip daddr ' + remoteSubnet + ' accept comment "luci-app-openvpn-plus: Static Site-To-Site inbound forward for ' + instance_id + '";\n';
+	}
+	s2sNftContent += ';\n';
+
+	// Try to read the old file content to see if the script actually changed
+	let oldScriptContent = '';
+	try {
+		oldScriptContent = await secureReadFile(s2sScriptPath);
+	} catch {
+		oldScriptContent = '';
+	}
+
+	// Only write the file to the flash storage if the content is different
+	if (String(oldScriptContent).trim() !== s2sNftContent.trim()) {
+		await secureWriteFile(s2sScriptPath, s2sNftContent);
+		// if changed return true
+		return true;
+	} else {
+		return false;
+	}
+}
+
+/**
  * Configures firewall zones, forwardings, and static site-to-site forwarding loops without wiping sections
  */
 const syncInstanceFirewallRule = async function (instance_id, instObj, role, customPort, customProto, serverSiteToSite, floodGuardEnabled, appData, conf) {
@@ -4353,6 +4878,7 @@ const syncInstanceFirewallRule = async function (instance_id, instObj, role, cus
 	// Inbound WAN rule blocks (Server only)
 	const fwRuleSection = CFG.ID.fw_openvpn_rule + instance_id;
 	const fwIncludeSection = CFG.ID.fw_openvpn_inc + instance_id;
+	const fwJumpSection = CFG.ID.fw_openvpn_jmp_inc + instance_id;
 
 	// Dedicated block for the custom static site-to-site script injection
 	const fwS2SIncludeSection = CFG.ID.fw_openvpn_s2s_inc + instance_id;
@@ -4395,6 +4921,10 @@ const syncInstanceFirewallRule = async function (instance_id, instObj, role, cus
 	try {
 		const deviceName = instObj.devName;
 		const zoneName = 'vpn_zone_' + instance_id;
+		const nftScriptPath = CFG.FILE.dir_cfg + instance_id + '.nft';
+		const jmpScriptPath = CFG.FILE.dir_cfg + instance_id + '.jmp.nft';
+		const s2sScriptPath = CFG.FILE.dir_cfg + instance_id + '.s2s.nft';
+		let floodGuardValid = false;
 
 		// --- SECTION 1: SERVER SPECIFIC INBOUND WAN ROLES ---
 		if (role === OPENVPN.ROLE.SERVER) {
@@ -4404,8 +4934,8 @@ const syncInstanceFirewallRule = async function (instance_id, instObj, role, cus
 			}
 
 			let targetProto = customProto;
-			if (!targetProto || (targetProto !== OPENVPN.PROTO.UDP && targetProto !== OPENVPN.PROTO.TCP)) {
-				targetProto = OPENVPN.PROTO.UDP;
+			if (!targetProto || (targetProto !== OPENVPN.PROTO.udp && targetProto !== OPENVPN.PROTO.tcp)) {
+				targetProto = OPENVPN.PROTO.udp;
 			}
 
 			// Ensure the inbound WAN port rule exists and matches target metrics
@@ -4415,21 +4945,52 @@ const syncInstanceFirewallRule = async function (instance_id, instObj, role, cus
 			safeUciSet(CFG.CMD.firewall, fwRuleSection, 'dest_port', String(targetPort));
 			safeUciSet(CFG.CMD.firewall, fwRuleSection, 'proto', targetProto);
 			safeUciSet(CFG.CMD.firewall, fwRuleSection, 'target', 'ACCEPT');
+			safeUciSet(CFG.CMD.firewall, fwRuleSection, 'enabled', '1');
 
 			// Manage the custom flood guard script include block
 			if (floodGuardEnabled === true) {
-				safeUciAdd(CFG.CMD.firewall, 'include', fwIncludeSection);
-				safeUciSet(CFG.CMD.firewall, fwIncludeSection, 'type', 'script');
-				safeUciSet(CFG.CMD.firewall, fwIncludeSection, 'fw4_compatible', '1');
-				safeUciSet(CFG.CMD.firewall, fwIncludeSection, 'enabled', '1');
-				safeUciSet(CFG.CMD.firewall, fwIncludeSection, 'path', CFG.FILE.dir_cfg + instance_id + '.nft');
-			} else {
-				safeUciRemove(CFG.CMD.firewall, fwIncludeSection);
+
+				// create/check instance*.nft file
+				const result = await generate_nft_file(targetProto, targetPort, instance_id, nftScriptPath);
+				if (result.valid) {
+					floodGuardValid = true;
+					if (result.changed) {
+						hasChanges = true;
+					}
+
+					// Set instance*.nft include (floodGuardEnabled rules file)
+					safeUciAdd(CFG.CMD.firewall, 'include', fwIncludeSection);
+					safeUciSet(CFG.CMD.firewall, fwIncludeSection, 'type', 'nftables');
+					safeUciSet(CFG.CMD.firewall, fwIncludeSection, 'path', nftScriptPath);
+					safeUciSet(CFG.CMD.firewall, fwIncludeSection, 'position', 'table-pre');
+					safeUciSet(CFG.CMD.firewall, fwIncludeSection, 'enabled', '1');
+
+					// create/check instance*.jmp.nft file
+					const new_jmp_file = await generate_jmp_nft_file(targetProto, targetPort, instance_id, jmpScriptPath);
+					if (new_jmp_file) {
+						hasChanges = true;
+					}
+
+					// Set instance*.jmp.nft include (jump to floodGuardEnabled rules)
+					safeUciAdd(CFG.CMD.firewall, 'include', fwJumpSection);
+					safeUciSet(CFG.CMD.firewall, fwJumpSection, 'type', 'nftables');
+					safeUciSet(CFG.CMD.firewall, fwJumpSection, 'path', jmpScriptPath);
+					safeUciSet(CFG.CMD.firewall, fwJumpSection, 'position', 'chain-pre');
+					safeUciSet(CFG.CMD.firewall, fwJumpSection, 'chain', 'input');
+					safeUciSet(CFG.CMD.firewall, fwJumpSection, 'enabled', '1');
+				}
 			}
 		} else {
 			// Remove server specific rules if the instance is now a client
 			safeUciRemove(CFG.CMD.firewall, fwRuleSection);
+		}
+
+		// Remove floodguard rules and files if not valid
+		if (floodGuardValid === false) {
 			safeUciRemove(CFG.CMD.firewall, fwIncludeSection);
+			safeUciRemove(CFG.CMD.firewall, fwJumpSection);
+			secureRemoveFile(nftScriptPath);
+			secureRemoveFile(jmpScriptPath);
 		}
 
 		// --- SECTION 2: STATIC SITE-TO-SITE ROUTING ---
@@ -4441,43 +5002,18 @@ const syncInstanceFirewallRule = async function (instance_id, instObj, role, cus
 				const localLan = await getLanIpMask(true);
 				const localSubnet = appData.statusClass.netIPCIDR(localLan.ip, localLan.mask);
 
-				let s2sNftContent = '#!/bin/sh\n\n';
-				s2sNftContent += '# Automatically generated by luci-app-openvpn-plus - OpenVPN Site-to-Site Firewall Rules\n\n';
-
-				for (let i = 0; i < remoteSubnets.length; i++) {
-					const remoteSubnet = remoteSubnets[i];
-					if (!remoteSubnet) {
-						continue;
-					}
-					s2sNftContent += 'nft "insert rule inet fw4 forward index 0 iifname br-lan ip daddr ' + remoteSubnet + ' counter accept comment \\"luci-app-openvpn-plus: static s2s outbound forward for ' + instance_id + '\\""\n';
-				}
-
-				s2sNftContent += '\n';
-				s2sNftContent += 'nft "insert rule inet fw4 forward index 0 iifname ' + deviceName + ' ip daddr ' + localSubnet + ' counter accept comment \\"luci-app-openvpn-plus: static s2s inbound forward for ' + instance_id + '\\""\n';
-				s2sNftContent += '\n';
-
-				const s2sScriptPath = CFG.FILE.dir_cfg + instance_id + '.s2s.nft';
-
-				// Try to read the old file content to see if the script actually changed
-				let oldScriptContent = '';
-				try {
-					oldScriptContent = await secureReadFile(s2sScriptPath);
-				} catch {
-					oldScriptContent = '';
-				}
-
-				// Only write the file to the flash storage if the content is different
-				if (String(oldScriptContent).trim() !== s2sNftContent.trim()) {
-					await secureWriteFile(s2sScriptPath, s2sNftContent);
+				const newfile = await generate_s2s_nft_file(deviceName, localSubnet, remoteSubnets, instance_id, s2sScriptPath);
+				if (newfile) {
 					hasChanges = true;
 				}
 
 				// Register the script file inside the firewall configuration tree safely
 				safeUciAdd(CFG.CMD.firewall, 'include', fwS2SIncludeSection);
-				safeUciSet(CFG.CMD.firewall, fwS2SIncludeSection, 'type', 'script');
-				safeUciSet(CFG.CMD.firewall, fwS2SIncludeSection, 'fw4_compatible', '1');
-				safeUciSet(CFG.CMD.firewall, fwS2SIncludeSection, 'enabled', '1');
+				safeUciSet(CFG.CMD.firewall, fwS2SIncludeSection, 'type', 'nftables');
 				safeUciSet(CFG.CMD.firewall, fwS2SIncludeSection, 'path', s2sScriptPath);
+				safeUciSet(CFG.CMD.firewall, fwS2SIncludeSection, 'position', 'chain-pre');
+				safeUciSet(CFG.CMD.firewall, fwS2SIncludeSection, 'chain', 'forward');
+				safeUciSet(CFG.CMD.firewall, fwS2SIncludeSection, 'enabled', '1');
 				s2sScript = true;
 			}
 		}
@@ -4485,6 +5021,7 @@ const syncInstanceFirewallRule = async function (instance_id, instObj, role, cus
 		// Remove the site-to-site block if it was not triggered or has no valid subnets
 		if (s2sScript === false) {
 			safeUciRemove(CFG.CMD.firewall, fwS2SIncludeSection);
+			secureRemoveFile(s2sScriptPath);
 		}
 
 		// --- SECTION 3: SYMMETRICAL VPN ZONE & LAN FORWARDING ---
@@ -4498,6 +5035,7 @@ const syncInstanceFirewallRule = async function (instance_id, instObj, role, cus
 		safeUciSet(CFG.CMD.firewall, fwZoneSection, 'output', 'ACCEPT');
 		safeUciSet(CFG.CMD.firewall, fwZoneSection, 'forward', 'ACCEPT');
 		safeUciSet(CFG.CMD.firewall, fwZoneSection, 'mtu_fix', '1');
+		safeUciSet(CFG.CMD.firewall, fwZoneSection, 'enabled', '1');
 
 		// Resolve the main local LAN zone safely
 		const fwSections = L.uci.sections(CFG.CMD.firewall, 'zone') || [];
@@ -4522,11 +5060,13 @@ const syncInstanceFirewallRule = async function (instance_id, instObj, role, cus
 		safeUciAdd(CFG.CMD.firewall, 'forwarding', fwForwardLanSection);
 		safeUciSet(CFG.CMD.firewall, fwForwardLanSection, 'src', 'lan');
 		safeUciSet(CFG.CMD.firewall, fwForwardLanSection, 'dest', zoneName);
+		safeUciSet(CFG.CMD.firewall, fwForwardLanSection, 'enabled', '1');
 
 		// Configure the forwarding from VPN zone back to LAN safely
 		safeUciAdd(CFG.CMD.firewall, 'forwarding', fwForwardVpnSection);
 		safeUciSet(CFG.CMD.firewall, fwForwardVpnSection, 'src', zoneName);
 		safeUciSet(CFG.CMD.firewall, fwForwardVpnSection, 'dest', 'lan');
+		safeUciSet(CFG.CMD.firewall, fwForwardVpnSection, 'enabled', '1');
 
 		// Only save and request a firewall reload if changes were actually detected
 		if (hasChanges === true) {
@@ -4564,12 +5104,18 @@ const removeInstanceFirewallRule = function (instance_id) {
 	// Delete the inbound WAN rule blocks if they exist
 	safeUciRemove(CFG.CMD.firewall, CFG.ID.fw_openvpn_rule + instance_id);
 	safeUciRemove(CFG.CMD.firewall, CFG.ID.fw_openvpn_inc + instance_id);
+	safeUciRemove(CFG.CMD.firewall, CFG.ID.fw_openvpn_jmp_inc + instance_id);
 	safeUciRemove(CFG.CMD.firewall, CFG.ID.fw_openvpn_s2s_inc + instance_id);
 
 	// Delete the site-to-site zone and forwarding blocks completely if they exist
 	safeUciRemove(CFG.CMD.firewall, CFG.ID.fw_openvpn_zone + instance_id);
 	safeUciRemove(CFG.CMD.firewall, CFG.ID.fw_openvpn_fwd_lan + instance_id);
 	safeUciRemove(CFG.CMD.firewall, CFG.ID.fw_openvpn_fwd_vpn + instance_id);
+
+	// Delete nft files if they exist
+	secureRemoveFile(CFG.FILE.dir_cfg + instance_id + '.nft');
+	secureRemoveFile(CFG.FILE.dir_cfg + instance_id + '.jmp.nft');
+	secureRemoveFile(CFG.FILE.dir_cfg + instance_id + '.s2s.nft');
 
 	// Only commit to storage and request a reload if sections were actually deleted
 	if (hasChanges === true) {
@@ -4579,35 +5125,37 @@ const removeInstanceFirewallRule = function (instance_id) {
 };
 
 /**
- * Reads and aggregates live packet and byte counters from the custom nftables sub-chain
- */
+* Reads and aggregates live packet and byte counters from the custom nftables sub-chain
+*/
 const getSubChainMetrics = async function (subChainName) {
 	// Runs your specialized firewall nft list backend utility safely
 	const output = await luci_app_openvpn_plus([CFG.LIBEXEC.firewallnft, subChainName]);
-	if (output.length > 0) {
 
-		// Matches any counter line ending with either 'reject' or 'drop' (supports both TCP & UDP)
-		const counterLines = output.match(/counter packets \d+ bytes \d+ (update|reject|drop)/g) || [];
-
-		let totalPackets = 0;
-		let totalBytes = 0;
-
-		counterLines.forEach(function (line) {
-			// Captures both numeric groups cleanly using digits (\d+)
-			const metrics = line.match(/packets (\d+) bytes (\d+)/);
-			if (metrics && metrics[1] && metrics[2]) {
-				totalPackets += parseInt(metrics[1], 10);
-				totalBytes += parseInt(metrics[2], 10);
-			}
-		});
-
-		return {
-			active: true,
-			packets: totalPackets,
-			bytes: totalBytes
-		};
+	// Catch backend errors or inactive firewall chains immediately
+	if (!output || output.length === 0 || output.startsWith('ERROR')) {
+		return { active: false, packets: 0, bytes: 0 };
 	}
-	return { active: false, packets: 0, bytes: 0 };
+
+	// Matches any counter line ending with either 'reject' or 'drop' (supports both TCP & UDP)
+	const counterLines = output.match(/counter packets \d+ bytes \d+ (update|reject|drop)/g) || [];
+
+	let totalPackets = 0;
+	let totalBytes = 0;
+
+	counterLines.forEach(function (line) {
+		// Captures both numeric groups cleanly using digits (\d+)
+		const metrics = line.match(/packets (\d+) bytes (\d+)/);
+		if (metrics && metrics[1] && metrics[2]) {
+			totalPackets += parseInt(metrics[1], 10);
+			totalBytes += parseInt(metrics[2], 10);
+		}
+	});
+
+	return {
+		active: true,
+		packets: totalPackets,
+		bytes: totalBytes
+	};
 };
 
 /**
@@ -4665,7 +5213,7 @@ const refreshFirewall = async function (appData) {
 		if (inst && inst.isRunning === true && inst.floodGuard === true) {
 			isfloodGuardInUse = true;
 			// Push active query promise into parallel execution queue
-			metricPromises.push(getSubChainMetrics('ovpn_filter_' + inst.id));
+			metricPromises.push(getSubChainMetrics(CFG.ID.fw_openvpn_floodguard + inst.id));
 		}
 	});
 
@@ -4737,7 +5285,7 @@ const renderFirewallInfoBox = function (appData) {
 		const sectionName = r['.name'] || '';
 		if (sectionName.indexOf('openvpn_') === 0 || sectionName.indexOf('openvpn_rule_') === 0) {
 			const pVal = L.uci.get(CFG.CMD.firewall, sectionName, 'dest_port');
-			let protoVal = L.uci.get(CFG.CMD.firewall, sectionName, 'proto') || OPENVPN.PROTO.UDP;
+			let protoVal = L.uci.get(CFG.CMD.firewall, sectionName, 'proto') || OPENVPN.PROTO.udp;
 
 			if (pVal) {
 				const pNum = parseInt(pVal, 10);
@@ -4769,7 +5317,7 @@ const renderFirewallInfoBox = function (appData) {
 };
 
 /**
- * Create the RPC call to run system commands.
+ * Create the RPC call to run logread system command.
  */
 const logreadNativeRpc = L.rpc.declare({
 	object: 'file',
@@ -5427,7 +5975,7 @@ return view.extend({
 				await appData.statusClass.onLoad();
 				ovpnPending.init(appData);
 
-				// Gets the openvon sections from LuCI
+				// Gets the openvpn sections from LuCI
 				const ovpnSections = L.uci.sections(CFG.CMD.openvpn, CFG.CMD.openvpn) || [];
 				// Sorts the array alphabetically based on the internal '.name' (instance1, instance2, ...)
 				ovpnSections.sort(function (a, b) {
@@ -5459,8 +6007,6 @@ return view.extend({
 	 */
 	render: function () {
 		try {
-
-
 			const appData = this.APP_DATA;
 			const openvpnState = isAnyInstanceEnabled(appData.ovpnUciSections) ? OPENVPN.STATE.active : OPENVPN.STATE.disabled;
 			const openvpnStatus = appData.statusClass;
@@ -5508,7 +6054,7 @@ return view.extend({
 				renderStatusControlBox(openvpnState, masterServerBtn, masterClientBtn, appData)
 			]);
 
-			const renderOpenVPNView = E('div', { 'class': 'cbi-map', 'style': 'position:relative; min-height:300px;' }, [
+			const renderOpenVpnView = E('div', { 'class': 'cbi-map', 'style': 'position:relative; min-height:300px;' }, [
 				startupLockOverlay,
 
 				statusControlBox,
@@ -5530,7 +6076,7 @@ return view.extend({
 				setupMainRefresh(appData, statusTable);
 			});
 
-			return renderOpenVPNView;
+			return renderOpenVpnView;
 
 		} catch (err) {
 			console.error('Error rendering main OpenVPN dashboard: ', err);

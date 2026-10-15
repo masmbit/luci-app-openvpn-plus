@@ -51,7 +51,9 @@ const TXT = {
 		MISSING: _('MISSING'),
 		WORKING: _('WORKING'),
 		mask: _('Mask'),
-		openvpn_profile_valid: _('OpenVPN Profile Valid:'),
+		openvpn_profile_valid: _('OpenVPN Profile Valid'),
+		client_profile_detected: _('OpenVPN Client Profile detected'),
+		server_profile_detected: _('OpenVPN Server Profile detected'),
 		outside_port: _('Outside Port'),
 		port_forwarding: _('Port Forwarding'),
 		protocol: _('Protocol'),
@@ -225,8 +227,8 @@ const OPENVPN = Object.freeze({
 		SITETOSITE: 'sitetosite'
 	}),
 	PROTO: Object.freeze({
-		TCP: 'tcp',
-		UDP: 'udp'
+		tcp: 'tcp',
+		udp: 'udp'
 	}),
 	PORT: Object.freeze({
 		s1194: '1194',
@@ -261,6 +263,7 @@ const WIZARD_DATA_TEMPLATE = Object.freeze({
 	importOvpnClientProfileCallback: null,		// Function to parse text, key bundles, and routing layouts from uploaded files
 	instanceNumber: 1,							// Stores the current or next available numeric instance identification index
 	forcedScenario: null,						// Bypasses the initial role selection step if the scenario context is locked
+	forcedScenarioTitle: null					// Custrom title for Forced Cenario
 });
 
 /**
@@ -271,7 +274,7 @@ const WIZARD_PARAMS_TEMPLATE = Object.freeze({
 	role: OPENVPN.ROLE.SERVER,					// Target configuration profile role mapping (server or client)
 	port: OPENVPN.PORT.n1194,					// Internal numeric system port assignment for the local process listener
 	portExtern: OPENVPN.PORT.n1194,				// External port offset mapping used for firewall rule deployments
-	proto: OPENVPN.PROTO.UDP,					// Transport layer connection protocol string selection (udp or tcp)
+	proto: OPENVPN.PROTO.udp,					// Transport layer connection protocol string selection (udp or tcp)
 	displayName: '',							// Localized custom alias name assigned to distinguish the specific tunnel
 	strategy: OPENVPN.STRATEGY.STANDARD,		// Network traffic management profile (standard, redirect, or sitetosite)
 	remoteServer: '',							// Client role parameter: Target remote server public IP or domain string
@@ -283,7 +286,8 @@ const WIZARD_PARAMS_TEMPLATE = Object.freeze({
 	isStaticIp: false,							// Semiautomatic safety override bypassing the active IP migration checks
 	ddnsProvider: '',							// Selected dynamic DNS provider configuration key profile token identification
 	ddnsUrl: '',								// Generated secure HTTP GET request string dispatched for provider synchronization
-	importedRawOvpn: ''							// Temporary payload staging buffer holding raw client file profile contents
+	importedRawOvpn: '',						// Temporary payload staging buffer holding raw client file profile contents
+	isServerBackup: false,
 });
 
 
@@ -389,53 +393,9 @@ const getValidCommonName = function (name) {
 };
 
 /**
- * Validate and clean any given IPv4 or IPv6 address string
- */
-const checkIPAddress = function (rawIp) {
-	if (!rawIp) {
-		return null;
-	}
-
-	// Delete all spaces, tabs and hidden lines from the text (tr -d ' \t\r\n')
-	const ip = rawIp.replace(/[\s\t\r\n]/g, '');
-	if (ip === '') {
-		return null;
-	}
-
-	const ipv4Regex = /^([0-9]{1,3}\.){3}[0-9]{1,3}$/;
-
-	// FIXED: Standard compliant IPv6 pattern that correctly handles "::" and blocks ":::"
-	const ipv6Regex = /^(?:[0-9a-fA-F]{1,4}:){1,7}:$|^(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}$|^(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}$|^(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}$|^[0-9a-fA-F]{1,4}:(?::[0-9a-fA-F]{1,4}){1,6}$|^:(?::[0-9a-fA-F]{1,4}){1,7}$|^::$/;
-
-	// Case 1: Check if the text is a valid IPv4 address (numbers 0 to 255)
-	if (ipv4Regex.test(ip)) {
-		const segments = ip.split('.');
-		const octet1 = parseInt(segments[0], 10);
-		const octet2 = parseInt(segments[1], 10);
-		const octet3 = parseInt(segments[2], 10);
-		const octet4 = parseInt(segments[3], 10);
-
-		// Match the awk rule: $1<=255 && $2<=255 && $3<=255 && $4<=255
-		if (octet1 <= 255 && octet2 <= 255 && octet3 <= 255 && octet4 <= 255) {
-			return { ip: ip, isV6: false };
-		}
-	}
-
-	// Case 2: Check if the text matches the verified IPv6 regex
-	if (ipv6Regex.test(ip)) {
-		if (ip.indexOf(':') !== -1) {
-			// Change all hex letters to lowercase for safe matching later (tr 'A-Z' 'a-z')
-			return { ip: ip.toLowerCase(), isV6: true };
-		}
-	}
-
-	return null;
-};
-
-/**
  * Generates an isolated, self-validating Site-to-Site network inputs row layout block
  */
-const renderSubnetInputs = function () {
+const renderSubnetInputs = function (checkIpCallback) {
 	// Create the 3 input fields with simple, easy text placeholders
 	const cnInput = E('input', { 'type': 'text', 'class': 'cbi-input-text', 'placeholder': TXT.INFO.remote_office_name, 'style': 'width:32%; font-family:monospace; margin-right:1%;' });
 	const subnetInput = E('input', { 'type': 'text', 'class': 'cbi-input-text', 'placeholder': TXT.INFO.lan_ip + ' (192.168.2.0)', 'style': 'width:32%; font-family:monospace; margin-right:1%;' });
@@ -499,7 +459,7 @@ const renderSubnetInputs = function () {
 			}
 
 			// 2. Validate IP Address using your verified template logic
-			const ipResult = checkIPAddress(rawSub);
+			const ipResult = (typeof checkIpCallback === 'function') ? checkIpCallback(rawSub) : null
 			if (!ipResult) {
 				subnetInput.classList.add('cbi-input-invalid');
 				hasValidationError = true;
@@ -1107,7 +1067,6 @@ const showMessage = function (text, type, box) {
 	box.style.setProperty('display', 'block', 'important');
 };
 
-
 const hideMessage = function (box) {
 	box.style.setProperty('display', 'none', 'important');
 }
@@ -1147,10 +1106,7 @@ const importClientInstance = async function (elements, wizardData, nextBtn, prev
 	}
 
 	try {
-		const extractedParams = await wizardData.importOvpnClientProfileCallback(
-			activeSubParams.importedRawOvpn,
-			targetInstanceId
-		);
+		const extractedParams = await wizardData.importOvpnClientProfileCallback(activeSubParams.importedRawOvpn, targetInstanceId, wizardData.appData);
 
 		// Path A: Update security keys only
 		if (extractedParams.isCryptoUpdateOnly === true) {
@@ -1169,7 +1125,7 @@ const importClientInstance = async function (elements, wizardData, nextBtn, prev
 		// Path B: Full setup for a brand new profile installation
 		const wizardParams = Object.assign({}, WIZARD_PARAMS_TEMPLATE, {
 			clients: [],
-			role: OPENVPN.ROLE.CLIENT,
+			role: extractedParams.isServerBackup ? OPENVPN.ROLE.SERVER : OPENVPN.ROLE.CLIENT,
 			port: extractedParams.port,
 			proto: extractedParams.proto,
 			displayName: extractedParams.cname || cleanCustomName || TXT.INFO.imported_clients,
@@ -1178,7 +1134,8 @@ const importClientInstance = async function (elements, wizardData, nextBtn, prev
 			remoteServerLan: extractedParams.remoteServerLan,
 			isApMode: false,
 			ddnsOrPublicIp: '',
-			importedRawOvpn: activeSubParams.importedRawOvpn || ''
+			importedRawOvpn: activeSubParams.importedRawOvpn || '',
+			isServerBackup: extractedParams.isServerBackup
 		});
 
 		if (typeof wizardData.addNewInstanceCallback === 'function') {
@@ -1409,7 +1366,7 @@ const renderOptionSiteServer = function (portForwardingAlert, wizardData) {
 	};
 
 	// 4. Load the input fields row component
-	const networkInputComponent = renderSubnetInputs();
+	const networkInputComponent = renderSubnetInputs(wizardData.networkCallbacks.checkIp);
 
 	// 5. Create the "Add" button
 	const addEntryBtn = E('button', {
@@ -1636,18 +1593,21 @@ const renderOptionSiteClient = function (buttons, messageBox) {
 			const remoteServerMatch = text.match(/^remote\s+(\S+)\s+(\d+)/m);
 			const protoMatch = text.match(/^proto\s+(\S+)/m);
 			const hasCaTag = (text.indexOf('<ca>') !== -1);
+			const isServerBackupFile = /^server\s+/m.test(text) || /^server-ipv6\s+/m.test(text);
 
 			if (remoteServerMatch) {
-				// PATH A: Valid full configuration profile (.ovpn)
+				// PATH A: Valid full client configuration profile (.ovpn)
 				uploadedFileContentStr = text;
 
 				const successContent = E('div', {}, [
 					E('strong', {}, ICON.SUCCESS + ' ' + TXT.INFO.openvpn_profile_valid),
 					E('br'),
+					E('span', {}, ICON.ARROW + ' ' + TXT.INFO.client_profile_detected),
+					E('br'),
 					E('span', {}, [
 						ICON.ARROW + ' ' + TXT.INFO.server_address + ': ',
 						E('code', { 'style': 'font-weight:bold; color:var(--primary-color-high, #1976d2);' },
-							remoteServerMatch[1] + ':' + remoteServerMatch[2] + ' (' + (protoMatch ? protoMatch[1] : OPENVPN.PROTO.UDP) + ')'
+							remoteServerMatch[1] + ':' + remoteServerMatch[2] + ' (' + (protoMatch ? protoMatch[1] : OPENVPN.PROTO.udp) + ')'
 						)
 					])
 				]);
@@ -1658,8 +1618,24 @@ const renderOptionSiteClient = function (buttons, messageBox) {
 					buttons.next.disabled = false;
 				}
 			}
+			else if (isServerBackupFile === true) {
+				// PATH B: Valid full server configuration profile (.ovpn)
+				uploadedFileContentStr = text;
+
+				const successContent = E('div', {}, [
+					E('strong', {}, ICON.SUCCESS + ' ' + TXT.INFO.openvpn_profile_valid),
+					E('br'),
+					E('span', {}, ICON.ARROW + ' ' + TXT.INFO.server_profile_detected),
+				]);
+
+				showMessage(successContent, MESSAGE_TYPE.OK, messageBox);
+
+				if (buttons && buttons.next) {
+					buttons.next.disabled = false;
+				}
+			}
 			else if (isCrtExtension === true || (hasCaTag === true && !remoteServerMatch)) {
-				// PATH B: Valid cryptographic multi-key bundle (.crt)
+				// PATH C: Valid cryptographic multi-key bundle (.crt)
 				uploadedFileContentStr = text;
 
 				const warningContent = E('div', {}, [
@@ -1680,7 +1656,7 @@ const renderOptionSiteClient = function (buttons, messageBox) {
 				}
 			}
 			else {
-				// PATH C: File is corrupted or missing vital fields
+				// PATH D: File is corrupted or missing vital fields
 				fileInput.classList.add('cbi-input-invalid');
 				customUploadBtn.classList.add('cbi-input-invalid');
 				fileInput.value = '';
@@ -1975,8 +1951,8 @@ const createWizardInputElements = function (buttons, wizardData, selectedScenari
 		radioSiteClient.disabled = true;
 	}
 
-	const radioUdp = E('input', { 'type': 'radio', 'name': 'wizard_proto_group', 'value': OPENVPN.PROTO.UDP, 'style': 'width:18px; height:18px; margin:0; cursor:pointer;' });
-	const radioTcp = E('input', { 'type': 'radio', 'name': 'wizard_proto_group', 'value': OPENVPN.PROTO.TCP, 'style': 'width:18px; height:18px; margin:0; cursor:pointer;' });
+	const radioUdp = E('input', { 'type': 'radio', 'name': 'wizard_proto_group', 'value': OPENVPN.PROTO.udp, 'style': 'width:18px; height:18px; margin:0; cursor:pointer;' });
+	const radioTcp = E('input', { 'type': 'radio', 'name': 'wizard_proto_group', 'value': OPENVPN.PROTO.tcp, 'style': 'width:18px; height:18px; margin:0; cursor:pointer;' });
 	const displayNameInput = E('input', { 'type': 'text', 'class': 'cbi-input-text', 'placeholder': TXT.MSG.placeholder_myhomevpn, 'style': 'width:100%;' });
 	const ddnsInput = E('input', { 'type': 'text', 'class': 'cbi-input-text', 'placeholder': TXT.MSG.placeholder_mydomain_publicip, 'style': 'width:100%; font-weight:bold; color:var(--primary-color-high, #1976d2);' });
 	const portInput = E('input', { 'type': 'text', 'class': 'cbi-input-text', 'style': 'font-family:var(--font-monospace, monospace)' });
@@ -2060,7 +2036,7 @@ const createWizardNavigationButtons = function () {
 const updateDefaultWizardPorts = async function (protoValue, portForwardingAlert, portInput, externPortInput, scenario, wizardData) {
 	let defaultPort;
 	let defaultPortExtern;
-	const isTcp = (protoValue === OPENVPN.PROTO.TCP);
+	const isTcp = (protoValue === OPENVPN.PROTO.tcp);
 	if (isTcp) {
 		const ports = getPortsTcp(wizardData);
 		defaultPort = ports.port
@@ -2142,7 +2118,7 @@ const syncScenarioSubNodeVisibility = function (elements) {
  * Find out if UDP or TCP is selected
  */
 const getActiveProtoValue = function (elements) {
-	const protoValue = elements.radios.tcp.checked ? OPENVPN.PROTO.TCP : OPENVPN.PROTO.UDP;
+	const protoValue = elements.radios.tcp.checked ? OPENVPN.PROTO.tcp : OPENVPN.PROTO.udp;
 	return protoValue;
 };
 
@@ -2218,7 +2194,11 @@ const updateStepVisibility = function (elements, state, buttons, wizardData) {
 			scenarioTitle += '\u2003\u2003' + ICON.TAG + elements.inputs.displayName.value;
 		}
 
-		state.nodes.descr.textContent = scenarioTitle;
+		if (wizardData.forcedScenarioTitle) {
+			state.nodes.descr.textContent = '';
+		} else {
+			state.nodes.descr.textContent = scenarioTitle;
+		}
 	}
 };
 
@@ -2299,7 +2279,7 @@ const getPortsTcp = function (wizardData) {
 
 		// 1. Just count how many TCP instances are currently registered in total
 		for (let i = 0; i < instances.length; i++) {
-			if (instances[i] && instances[i].proto === OPENVPN.PROTO.TCP) {
+			if (instances[i] && instances[i].proto === OPENVPN.PROTO.tcp) {
 				tcpInstanceCount++;
 			}
 		}
@@ -2818,7 +2798,6 @@ const setupAddressValidator = function (elements, buttons, portForwardingAlert, 
 	});
 };
 
-
 /**
  * MAIN WIZARD
  */
@@ -2873,8 +2852,15 @@ const openWizardModal = function (wizardData, optionalHideClient) {
 		document.head.appendChild(styleNode);
 	}
 
+	let title;
+	if (wizardData.forcedScenarioTitle) {
+		title = wizardData.forcedScenarioTitle
+	} else {
+		title = ICON.ROCKET + TXT.INFO.setup_wizard;
+	}
+
 	// Show the modal window on the screen with a simple layout structure
-	L.ui.showModal(ICON.ROCKET + TXT.INFO.setup_wizard, [
+	L.ui.showModal(title, [
 		E('div', {
 			'class': 'cbi-map ovpn-plus-setup-wizard',
 			'style': 'width: 100%; margin: 0 auto;'
@@ -2901,12 +2887,12 @@ const openWizardModal = function (wizardData, optionalHideClient) {
 /**
  * Export the open wizard modal function to LuCI
  */
-return L.Class.extend(
-	{
-		WIZARD_DATA_TEMPLATE: WIZARD_DATA_TEMPLATE,
-		WIZARD_PARAMS_TEMPLATE: WIZARD_PARAMS_TEMPLATE,
-		renderSubnetInputs: renderSubnetInputs,
-		renderPortForwardingAlert: renderPortForwardingAlert,
-		getValidCommonName: getValidCommonName,
-		openWizardModal: openWizardModal
-	});
+return L.Class.extend({
+	WIZARD_DATA_TEMPLATE: WIZARD_DATA_TEMPLATE,
+	WIZARD_PARAMS_TEMPLATE: WIZARD_PARAMS_TEMPLATE,
+	renderSubnetInputs: renderSubnetInputs,
+	renderPortForwardingAlert: renderPortForwardingAlert,
+	getValidCommonName: getValidCommonName,
+	openWizardModal: openWizardModal
+});
+
