@@ -49,6 +49,18 @@ Even though the traffic has to pass through **Double-NAT** and simple port forwa
 - **Simple Profile Import & Export:** Upload existing `.ovpn` profiles or multi-key configuration files to start new client connections instantly.
 - **Clear Status Table:** Shows a small overview of running tunnels, active process IDs (PIDs), encryption types, and live data transfer.
 
+## Screenshots
+
+| Server/Client View | Status View |
+| :---: | :---: |
+| ![Server/Client View](screenshots/server.png) | ![Status View](screenshots/status-dark.png) |
+| ![Client View](screenshots/client.png) | ![QR Export](screenshots/qr-client-export.png) |
+| ![Wizard Mobile Start](screenshots/wizard-mobile-server-01.png) | ![Wizard Mobile Tunnel](screenshots/wizard-mobile-server-02.png) |
+| ![Wizard Mobile IP Setup](screenshots/wizard-mobile-server-03.png) | ![Wizard DDNS Setup](screenshots/wizard-mobile-server-04.png) |
+| ![Wizard Site-To-Site Start](screenshots/wizard-main-office-01.png) | ![Wizard Site-To-Site Routing](screenshots/wizard-main-office-02.png) |
+| ![Wizard Port Forwarding](screenshots/port-forward.png) | ![Wizard Add Instance](screenshots/add-instance.png) |
+| ![Wizard Key View](screenshots/keyview.png) | ![Wizard KeyGen](screenshots/keygen.png)
+
 ## Configuration Layout
 
 The application manages settings inside `/etc/config/openvpn`:
@@ -72,6 +84,7 @@ luci-app-openvpn-plus/
 │   │   └── luci-app-openvpn-plus.po
 │   ├── zh-cn/
 │   │   └── luci-app-openvpn-plus.po
+├── screenshots/
 └── root/
 	├── etc/
 	│   ├── config/
